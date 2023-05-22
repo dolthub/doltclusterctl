@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/dolthub/doltclusterctl
+# gazelle:exclude proto
+# gazelle:proto disable_global
+# gazelle:go_naming_convention import
+gazelle(name = "gazelle")
+
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=deps.bzl%go_dependencies",
+        "-prune",
+        "-build_file_proto_mode",
+        "disable_global",
+    ],
+    command = "update-repos",
+)
+
+go_library(
+    name = "doltclusterctl_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/dolthub/doltclusterctl",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@io_k8s_api//apps/v1:apps",
+        "@io_k8s_api//core/v1:core",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:meta",
+        "@io_k8s_apimachinery//pkg/fields",
+        "@io_k8s_apimachinery//pkg/watch",
+        "@io_k8s_client_go//kubernetes",
+        "@io_k8s_client_go//rest",
+    ],
+)
+
+go_binary(
+    name = "doltclusterctl",
+    embed = [":doltclusterctl_lib"],
+    visibility = ["//visibility:public"],
+)
