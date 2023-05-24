@@ -1,0 +1,13 @@
+{
+  "_base": {
+    "description": "Base config that all subsequent analyzers, even unspecified will inherit.",
+    "exclude_files": {
+      "external/": "exclude all module imported code for all analyzers"
+    }
+  },
+  "shadow": {
+    "exclude_files": {
+      ".*": "turn it off"
+    }
+  }
+}

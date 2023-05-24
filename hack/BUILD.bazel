@@ -1,0 +1,7 @@
+sh_binary(
+    name = "gofmt",
+    srcs = ["gofmt.sh"],
+    data = [
+        "@go_sdk//:bin/gofmt",
+    ],
+)

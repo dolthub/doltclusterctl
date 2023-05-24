@@ -27,5 +27,5 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/dolthub/doltclusterctl/push",
     visibility = ["//visibility:private"],
-    deps = ["@com_github_awslabs_amazon_ecr_credential_helper_ecr_login//:go_default_library"],
+    deps = ["@com_github_awslabs_amazon_ecr_credential_helper_ecr_login//:ecr-login"],
 )

@@ -350,7 +350,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, clientset *kubernetes.Cli
 
 			roles[i], epochs[i], errors[i] = LoadRoleAndEpoch(ctx, db)
 			if errors[i] != nil {
-				fmt.Printf("WARNING: error loading role and epoch for pod %s: %w", s.PodName(i), errors[i])
+				fmt.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
 			}
 
 			return nil
@@ -802,7 +802,7 @@ PollPod:
 			db, err := s.DB(i)
 			if err == nil {
 				defer db.Close()
-				ctx, cancel := context.WithTimeout(ctx, 1 * time.Second)
+				ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 				defer cancel()
 				err = db.PingContext(ctx)
 			}

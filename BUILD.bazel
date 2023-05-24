@@ -1,7 +1,12 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "TOOLS_NOGO", "go_binary", "go_library", "nogo")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+load("@com_github_bazelbuild_buildtools//buildifier:def.bzl", "buildifier")
+
+buildifier(
+    name = "buildifier",
+)
 
 # gazelle:prefix github.com/dolthub/doltclusterctl
 # gazelle:exclude proto
@@ -19,6 +24,13 @@ gazelle(
         "disable_global",
     ],
     command = "update-repos",
+)
+
+nogo(
+    name = "nogo",
+    config = "nogo_config.json",
+    visibility = ["//visibility:public"],
+    deps = TOOLS_NOGO + [],
 )
 
 go_library(
