@@ -1,0 +1,7 @@
+[default]
+region = us-west-2
+
+[profile imagewriter]
+role_arn = arn:aws:iam::015796873774:role/DockerImageWriter
+region = us-west-2
+source_profile = default

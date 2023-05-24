@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_docker//container:container.bzl", "container_push")
+
+container_push(
+    name = "_push_public_image",
+    format = "OCI",
+    image = "//:image",
+    registry = "public.ecr.aws",
+    repository = "dolthub/doltclusterctl",
+    visibility = ["//visibility:private"],
+)
+
+sh_binary(
+    name = "push",
+    srcs = ["push.sh"],
+    data = [
+        ":_push_public_image",
+        ":awsconfig",
+        ":config.json",
+        "@com_github_awslabs_amazon_ecr_credential_helper_ecr_login//cli/docker-credential-ecr-login",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "push_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/dolthub/doltclusterctl/push",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_awslabs_amazon_ecr_credential_helper_ecr_login//:go_default_library"],
+)
