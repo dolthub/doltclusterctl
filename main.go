@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -34,15 +35,6 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-const subcommands = `
-SUBCOMMANDS
-
-  doltclusterctl applyprimarylabels statefulset_name - sets/unsets the primary labels on the pods in the StatefulSet with metadata.name: statefulset-name; labels the other pods standby.
-  doltclusterctl gracefulfailover statefulset_name - takes the current primary, marks it as a standby, and marks the next replica in the set as the primary.
-  doltclusterctl promotestandby statefulset_name - takes the first reachable standby and makes it the new primary.
-  doltclusterctl rollingrestart statefulset_name - deletes all pods in the stateful set, one at a time, waiting for the deleted pods to be recreated and ready before moving on; gracefully fails over the primary before deleting it.
-`
-
 func main() {
 	var cfg Config
 	cfg.Parse(flag.CommandLine, os.Args[1:])
@@ -51,21 +43,21 @@ func main() {
 		mysql.RegisterTLSConfig("custom", cfg.TLSConfig)
 	}
 
-	fmt.Printf("running %s against %s/%s\n", cfg.CommandStr, cfg.Namespace, cfg.StatefulSetName)
+	log.Printf("running %s against %s/%s", cfg.CommandStr, cfg.Namespace, cfg.StatefulSetName)
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		log.Fatalf("could not load kubernetes InClusterConfig: %v", err.Error())
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		panic(err.Error())
+		log.Fatalf("could not build kubernetes client for config: %v", err.Error())
 	}
 
 	ctx, f := context.WithDeadline(context.TODO(), time.Now().Add(cfg.Timeout))
 	defer f()
 	if err := cfg.Command.Run(ctx, &cfg, clientset); err != nil {
-		panic(err.Error())
+		log.Fatalf("error running command: %v", err.Error())
 	}
 }
 
@@ -282,7 +274,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 
 			roles[i], epochs[i], errors[i] = LoadRoleAndEpoch(ctx, db)
 			if errors[i] != nil {
-				fmt.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
+				log.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
 			}
 
 			return nil
@@ -318,7 +310,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 				return err
 			}
 			if ok {
-				fmt.Printf("applied primary label to %s/%s\n", p.Namespace, p.Name)
+				log.Printf("applied primary label to %s/%s", p.Namespace, p.Name)
 			}
 		} else {
 			ok, err := LabelStandby(ctx, s, i)
@@ -326,7 +318,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 				return err
 			}
 			if ok {
-				fmt.Printf("removed primary label from %s/%s\n", p.Namespace, p.Name)
+				log.Printf("removed primary label from %s/%s", p.Namespace, p.Name)
 			}
 		}
 	}
@@ -341,7 +333,7 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
+	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	roles := make([]string, s.Replicas())
 	epochs := make([]int, s.Replicas())
@@ -400,7 +392,7 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 	nextprimary := (currentprimary + 1) % len(s.Pods)
 	nextepoch := highestepoch + 1
 
-	fmt.Printf("failing over from %s to %s\n", s.PodName(currentprimary), s.PodName(nextprimary))
+	log.Printf("failing over from %s to %s", s.PodName(currentprimary), s.PodName(nextprimary))
 
 	for i := range s.Pods {
 		_, err = LabelStandby(ctx, s, i)
@@ -409,7 +401,7 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 		}
 	}
 
-	fmt.Printf("labeled all pods standby\n")
+	log.Printf("labeled all pods standby")
 
 	err = func() error {
 		db, err := s.DB(currentprimary)
@@ -428,7 +420,7 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 	if err != nil {
 		return err
 	}
-	fmt.Printf("called dolt_assume_cluster_role standby on %s\n", s.PodName(currentprimary))
+	log.Printf("called dolt_assume_cluster_role standby on %s", s.PodName(currentprimary))
 
 	err = func() error {
 		db, err := s.DB(nextprimary)
@@ -448,14 +440,14 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 		return err
 	}
 
-	fmt.Printf("called dolt_assume_cluster_role primary on %s\n", s.PodName(nextprimary))
+	log.Printf("called dolt_assume_cluster_role primary on %s", s.PodName(nextprimary))
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("added primary label to %s\n", s.PodName(nextprimary))
+	log.Printf("added primary label to %s", s.PodName(nextprimary))
 
 	return nil
 }
@@ -467,7 +459,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
+	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	roles := make([]string, s.Replicas())
 	epochs := make([]int, s.Replicas())
@@ -502,7 +494,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 	}
 	nextepoch := highestepoch + 1
 
-	fmt.Printf("found standby to promote: %s\n", s.PodName(nextprimary))
+	log.Printf("found standby to promote: %s", s.PodName(nextprimary))
 
 	for i := range s.Pods {
 		_, err = LabelStandby(ctx, s, i)
@@ -511,7 +503,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 		}
 	}
 
-	fmt.Printf("labeled all pods as standby\n")
+	log.Printf("labeled all pods as standby")
 
 	err = func() error {
 		db, err := s.DB(nextprimary)
@@ -530,13 +522,13 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 	if err != nil {
 		return err
 	}
-	fmt.Printf("called dolt_assume_cluster_role primary on: %s\n", s.PodName(nextprimary))
+	log.Printf("called dolt_assume_cluster_role primary on: %s", s.PodName(nextprimary))
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("applied primary label to %s\n", s.PodName(nextprimary))
+	log.Printf("applied primary label to %s", s.PodName(nextprimary))
 
 	return nil
 }
@@ -549,7 +541,7 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
+	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	dbstates := LoadDBStates(ctx, s)
 	curprimary := -1
@@ -588,7 +580,7 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 		if err != nil {
 			return err
 		}
-		fmt.Printf("pod is ready %s/%s\n", cfg.Namespace, s.Pods[i].Name)
+		log.Printf("pod is ready %s/%s", cfg.Namespace, s.Pods[i].Name)
 	}
 
 	// Every standby has been restarted. We failover the primary to the
@@ -603,13 +595,13 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	if nextprimary == -1 {
 		return fmt.Errorf("failed to find a reachable standby to promote")
 	}
-	fmt.Printf("decided pod %s/%s will be next primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("decided pod %s/%s will be next primary", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	_, err = LabelStandby(ctx, s, curprimary)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("labeled existing primary, %s/%s as standby\n", cfg.Namespace, s.Pods[curprimary].Name)
+	log.Printf("labeled existing primary, %s/%s as standby", cfg.Namespace, s.Pods[curprimary].Name)
 
 	err = func() error {
 		db, err := s.DB(curprimary)
@@ -628,7 +620,7 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	if err != nil {
 		return err
 	}
-	fmt.Printf("made existing primary, %s/%s role standby\n", cfg.Namespace, s.Pods[curprimary].Name)
+	log.Printf("made existing primary, %s/%s role standby", cfg.Namespace, s.Pods[curprimary].Name)
 
 	err = func() error {
 		db, err := s.DB(nextprimary)
@@ -647,16 +639,16 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	if err != nil {
 		return err
 	}
-	fmt.Printf("made new primary, %s/%s, role primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("made new primary, %s/%s, role primary", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("labeled new primary, %s/%s, role primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("labeled new primary, %s/%s, role primary", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	err = DeleteAndWaitForReady(ctx, s, curprimary)
-	fmt.Printf("deleted old primary pod, %s/%s\n", cfg.Namespace, s.Pods[curprimary].Name)
+	log.Printf("deleted old primary pod, %s/%s", cfg.Namespace, s.Pods[curprimary].Name)
 
 	return err
 }
@@ -702,18 +694,18 @@ func DeleteAndWaitForReady(ctx context.Context, s *State, i int) error {
 					return
 				}
 			case <-ctx.Done():
-				fmt.Printf("poll for deletiong of pod %s/%s finished with ctx.Done()\n", s.Cfg.Namespace, s.Pods[i].Name)
+				log.Printf("poll for deletiong of pod %s/%s finished with ctx.Done()", s.Cfg.Namespace, s.Pods[i].Name)
 				return
 			}
 		}
 	}()
-	fmt.Printf("deleting pod %s/%s\n", s.Cfg.Namespace, s.Pods[i].Name)
+	log.Printf("deleting pod %s/%s", s.Cfg.Namespace, s.Pods[i].Name)
 	err = pods.Delete(ctx, s.Pods[i].Name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	<-done
-	fmt.Printf("we believe pod %s/%s is deleted\n", s.Cfg.Namespace, s.Pods[i].Name)
+	log.Printf("we believe pod %s/%s is deleted", s.Cfg.Namespace, s.Pods[i].Name)
 
 	pollInterval := 100 * time.Millisecond
 	deadline := time.Now().Add(s.Cfg.WaitForReady)

@@ -26,6 +26,15 @@ import (
 	"time"
 )
 
+const SubcommandsUsage = `
+SUBCOMMANDS
+
+  doltclusterctl applyprimarylabels statefulset_name - sets/unsets the primary labels on the pods in the StatefulSet with metadata.name: statefulset-name; labels the other pods standby.
+  doltclusterctl gracefulfailover statefulset_name - takes the current primary, marks it as a standby, and marks the next replica in the set as the primary.
+  doltclusterctl promotestandby statefulset_name - takes the first reachable standby and makes it the new primary.
+  doltclusterctl rollingrestart statefulset_name - deletes all pods in the stateful set, one at a time, waiting for the deleted pods to be recreated and ready before moving on; gracefully fails over the primary before deleting it.
+`
+
 type Config struct {
 	// The kubernetes namespace of the statefulset.
 	Namespace string
@@ -40,7 +49,7 @@ type Config struct {
 	TLSInsecure bool
 
 	// The timeout for the entire command run.
-	Timeout      time.Duration
+	Timeout time.Duration
 	// A timeout for how long to wait for each individual restarted pod to
 	// come back and be ready.
 	WaitForReady time.Duration
@@ -84,14 +93,14 @@ func (c *Config) InitFlagSet(set *flag.FlagSet) {
 	set.Var((*tlsVerifiedFlagValue)(c), "tls", "if provided, enables manadatory verified TLS mode")
 	set.Var((*tlsInsecureFlagValue)(c), "tls-insecure", "if true, enables tls mode for communicating with the server, but does not verify the server's certificate")
 
-	set.DurationVar(&c.Timeout, "timeout", time.Second * 30, "the number of seconds the entire command has to run before it timeouts and exits non-zero")
-	set.DurationVar(&c.WaitForReady, "wait-for-ready", time.Second * 50, "the number of seconds to wait for a single pod to become ready when performing a rollingrestart until we consider the operation failed")
+	set.DurationVar(&c.Timeout, "timeout", time.Second*30, "the number of seconds the entire command has to run before it timeouts and exits non-zero")
+	set.DurationVar(&c.WaitForReady, "wait-for-ready", time.Second*50, "the number of seconds to wait for a single pod to become ready when performing a rollingrestart until we consider the operation failed")
 
 	set.Usage = func() {
 		fmt.Fprintf(set.Output(), "Usage of %s:\n\n", set.Name())
 		fmt.Fprintf(set.Output(), "  %s [COMMON OPTIONS...] subcommand statefulset_name\n\nCOMMON OPTIONS\n\n", set.Name())
 		flag.PrintDefaults()
-		fmt.Fprint(set.Output(), subcommands)
+		fmt.Fprint(set.Output(), SubcommandsUsage)
 	}
 }
 
@@ -124,20 +133,20 @@ func (c *Config) Parse(set *flag.FlagSet, args []string) error {
 	c.CommandStr = set.Arg(0)
 	c.StatefulSetName = set.Arg(1)
 
-        if c.CommandStr == "applyprimarylabels" {
-                c.Command = ApplyPrimaryLabels{}
-        } else if c.CommandStr == "gracefulfailover" {
-                c.Command = GracefulFailover{}
-        } else if c.CommandStr == "promotestandby" {
-                c.Command = PromoteStandby{}
-        } else if c.CommandStr == "rollingrestart" {
-                c.Command = RollingRestart{}
-        } else {
+	if c.CommandStr == "applyprimarylabels" {
+		c.Command = ApplyPrimaryLabels{}
+	} else if c.CommandStr == "gracefulfailover" {
+		c.Command = GracefulFailover{}
+	} else if c.CommandStr == "promotestandby" {
+		c.Command = PromoteStandby{}
+	} else if c.CommandStr == "rollingrestart" {
+		c.Command = RollingRestart{}
+	} else {
 		str := fmt.Sprintf("did not find subcommand %s", c.CommandStr)
 		fmt.Fprintln(set.Output(), str)
 		set.Usage()
 		return errF(errors.New(str))
-        }
+	}
 
 	return nil
 }

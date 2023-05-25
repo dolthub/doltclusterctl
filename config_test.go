@@ -247,7 +247,7 @@ func TestConfigFlagSet(t *testing.T) {
 		cfg.InitFlagSet(&set)
 		err := set.Parse([]string{"-timeout", "5m"})
 		assert.NoError(t, err)
-		assert.Equal(t, 5 * time.Minute, cfg.Timeout)
+		assert.Equal(t, 5*time.Minute, cfg.Timeout)
 	})
 	t.Run("WaitForReady", func(t *testing.T) {
 		var cfg Config
