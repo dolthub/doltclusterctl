@@ -153,7 +153,13 @@ func RenderDSN(cfg *Config, hostname string, port int) string {
 	return fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster%s", authority, hostname, port, params)
 }
 
-func CallAssumeRole(ctx context.Context, db *sql.DB, role string, epoch int) error {
+func CallAssumeRole(ctx context.Context, s *State, i int, role string, epoch int) error {
+	db, err := s.DB(i)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
@@ -184,9 +190,15 @@ func CallAssumeRole(ctx context.Context, db *sql.DB, role string, epoch int) err
 	return nil
 }
 
-func LoadRoleAndEpoch(ctx context.Context, db *sql.DB) (string, int, error) {
+func LoadRoleAndEpoch(ctx context.Context, s *State, i int) (string, int, error) {
 	var role string
 	var epoch int
+
+	db, err := s.DB(i)
+	if err != nil {
+		return "", 0, err
+	}
+	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -265,22 +277,9 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 
 	// Find current primary across the pods.
 	for i := range s.Pods {
-		err = func() error {
-			db, err := s.DB(i)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-
-			roles[i], epochs[i], errors[i] = LoadRoleAndEpoch(ctx, db)
-			if errors[i] != nil {
-				log.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
-			}
-
-			return nil
-		}()
-		if err != nil {
-			return err
+		roles[i], epochs[i], errors[i] = LoadRoleAndEpoch(ctx, s, i)
+		if errors[i] != nil {
+			log.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
 		}
 	}
 
@@ -340,34 +339,22 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 
 	// Find current primary across the pods.
 	for i := range s.Pods {
-		err = func() error {
-			db, err := s.DB(i)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-
-			roles[i], epochs[i], err = LoadRoleAndEpoch(ctx, db)
-			if err != nil {
-				// TODO: For now this remains an error.
-				// GracefulFailover is going to require all
-				// standbys to be caught up on all databases.
-				// If one of the databases is down, this is
-				// going to fail. Better to not disrupt traffic
-				// in this case.
-				//
-				// Once we can coordinate
-				// dolt_assume_role('standby', ...) to only
-				// need to true up 2/n+1 replicas, for example,
-				// and doltclusterctl to pick a standby to
-				// become the new primary which is recent
-				// enough, this error can change.
-				return fmt.Errorf("error loading role and epoch for pod %s: %w", s.PodName(i), err)
-			}
-			return nil
-		}()
+		roles[i], epochs[i], err = LoadRoleAndEpoch(ctx, s, i)
 		if err != nil {
-			return err
+			// TODO: For now this remains an error.
+			// GracefulFailover is going to require all
+			// standbys to be caught up on all databases.
+			// If one of the databases is down, this is
+			// going to fail. Better to not disrupt traffic
+			// in this case.
+			//
+			// Once we can coordinate
+			// dolt_assume_role('standby', ...) to only
+			// need to true up 2/n+1 replicas, for example,
+			// and doltclusterctl to pick a standby to
+			// become the new primary which is recent
+			// enough, this error can change.
+			return fmt.Errorf("error loading role and epoch for pod %s: %w", s.PodName(i), err)
 		}
 	}
 
@@ -403,39 +390,13 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 
 	log.Printf("labeled all pods standby")
 
-	err = func() error {
-		db, err := s.DB(currentprimary)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		err = CallAssumeRole(ctx, db, "standby", nextepoch)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
+	err = CallAssumeRole(ctx, s, currentprimary, "standby", nextepoch)
 	if err != nil {
 		return err
 	}
 	log.Printf("called dolt_assume_cluster_role standby on %s", s.PodName(currentprimary))
 
-	err = func() error {
-		db, err := s.DB(nextprimary)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		err = CallAssumeRole(ctx, db, "primary", nextepoch)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
+	err = CallAssumeRole(ctx, s, nextprimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
@@ -466,13 +427,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 
 	// We ignore errors here, since we just want the first reachable standby.
 	for i := range s.Pods {
-		func() {
-			db, err := s.DB(i)
-			if err == nil {
-				defer db.Close()
-				roles[i], epochs[i], _ = LoadRoleAndEpoch(ctx, db)
-			}
-		}()
+		roles[i], epochs[i], _ = LoadRoleAndEpoch(ctx, s, i)
 	}
 
 	nextprimary := -1
@@ -505,20 +460,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 
 	log.Printf("labeled all pods as standby")
 
-	err = func() error {
-		db, err := s.DB(nextprimary)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		err = CallAssumeRole(ctx, db, "primary", nextepoch)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
+	err = CallAssumeRole(ctx, s, nextprimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
@@ -603,39 +545,13 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	}
 	log.Printf("labeled existing primary, %s/%s as standby", cfg.Namespace, s.Pods[curprimary].Name)
 
-	err = func() error {
-		db, err := s.DB(curprimary)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		err = CallAssumeRole(ctx, db, "standby", nextepoch)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
+	err = CallAssumeRole(ctx, s, curprimary, "standby", nextepoch)
 	if err != nil {
 		return err
 	}
 	log.Printf("made existing primary, %s/%s role standby", cfg.Namespace, s.Pods[curprimary].Name)
 
-	err = func() error {
-		db, err := s.DB(nextprimary)
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		err = CallAssumeRole(ctx, db, "primary", nextepoch)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
+	err = CallAssumeRole(ctx, s, nextprimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
@@ -662,15 +578,7 @@ type DBState struct {
 func LoadDBStates(ctx context.Context, s *State) []DBState {
 	ret := make([]DBState, len(s.Pods))
 	for i := range s.Pods {
-		func() {
-			db, err := s.DB(i)
-			if err == nil {
-				defer db.Close()
-				ret[i].Role, ret[i].Epoch, ret[i].Err = LoadRoleAndEpoch(ctx, db)
-			} else {
-				ret[i].Err = err
-			}
-		}()
+		ret[i].Role, ret[i].Epoch, ret[i].Err = LoadRoleAndEpoch(ctx, s, i)
 	}
 	return ret
 }
