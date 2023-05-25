@@ -207,8 +207,13 @@ func (s *State) ServiceName() string {
 }
 
 func (s *State) DB(i int) (*sql.DB, error) {
-	h := s.PodHostname(i)
+	hostname := s.PodHostname(i)
 	port := s.Port()
+	dsn := RenderDSN(hostname, port)
+	return sql.Open("mysql", dsn)
+}
+
+func RenderDSN(hostname string, port int) string {
 	user := os.Getenv("DOLT_USERNAME")
 	if user == "" {
 		user = "root"
@@ -226,7 +231,7 @@ func (s *State) DB(i int) (*sql.DB, error) {
 	} else if *tlsVerified {
 		params += "?tls=true"
 	}
-	return sql.Open("mysql", fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster%s", authority, h, port, params))
+	return fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster%s", authority, hostname, port, params)
 }
 
 func CallAssumeRole(ctx context.Context, db *sql.DB, role string, epoch int) error {
