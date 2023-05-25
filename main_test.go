@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"testing"
 
@@ -32,21 +33,21 @@ func TestLoadDBStates(t *testing.T) {
 
 func TestRenderDSN(t *testing.T) {
 	t.Run("Default", func(t *testing.T) {
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{}, "localhost", 3306)
 		assert.Equal(t, "root@tcp(localhost:3306)/dolt_cluster", res)
 	})
 	t.Run("Username", func(t *testing.T) {
 		oldval := os.Getenv("DOLT_USERNAME")
 		defer os.Setenv("DOLT_USERNAME", oldval)
 		os.Setenv("DOLT_USERNAME", "test_username")
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{}, "localhost", 3306)
 		assert.Equal(t, "test_username@tcp(localhost:3306)/dolt_cluster", res)
 	})
 	t.Run("Password", func(t *testing.T) {
 		oldval := os.Getenv("DOLT_PASSWORD")
 		defer os.Setenv("DOLT_PASSWORD", oldval)
 		os.Setenv("DOLT_PASSWORD", "test_password")
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{}, "localhost", 3306)
 		assert.Equal(t, "root:test_password@tcp(localhost:3306)/dolt_cluster", res)
 	})
 	t.Run("UsernamePassword", func(t *testing.T) {
@@ -56,28 +57,19 @@ func TestRenderDSN(t *testing.T) {
 		defer os.Setenv("DOLT_PASSWORD", oldpass)
 		os.Setenv("DOLT_USERNAME", "test_username")
 		os.Setenv("DOLT_PASSWORD", "test_password")
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{}, "localhost", 3306)
 		assert.Equal(t, "test_username:test_password@tcp(localhost:3306)/dolt_cluster", res)
 	})
 	t.Run("TLSInsecure", func(t *testing.T) {
-		oldval := *tlsInsecure
-		defer func() { *tlsInsecure = oldval }()
-		*tlsInsecure = true
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{TLSInsecure: true}, "localhost", 3306)
 		assert.Equal(t, "root@tcp(localhost:3306)/dolt_cluster?tls=skip-verify", res)
 	})
 	t.Run("TLSVerified", func(t *testing.T) {
-		oldval := *tlsVerified
-		defer func() { *tlsVerified = oldval }()
-		*tlsVerified = true
-		res := RenderDSN("localhost", 3306)
+		res := RenderDSN(&Config{TLSVerified: true}, "localhost", 3306)
 		assert.Equal(t, "root@tcp(localhost:3306)/dolt_cluster?tls=true", res)
 	})
 	t.Run("TLSConfig", func(t *testing.T) {
-		oldval := tlsConfigName
-		defer func() { tlsConfigName = oldval }()
-		tlsConfigName = "custom_config_name"
-		res := RenderDSN("localhost", 3306)
-		assert.Equal(t, "root@tcp(localhost:3306)/dolt_cluster?tls=custom_config_name", res)
+		res := RenderDSN(&Config{TLSConfig: &tls.Config{}}, "localhost", 3306)
+		assert.Equal(t, "root@tcp(localhost:3306)/dolt_cluster?tls=custom", res)
 	})
 }

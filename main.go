@@ -16,12 +16,9 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
@@ -37,19 +34,6 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-var namespace = flag.String("n", "default", "namespace of the stateful set to operate on")
-var tlsCaPath = flag.String("tls-ca", "", "if provided, enables mandatory verified TLS mode; provides the path to a file to use as the certificate authority roots for verifying the server certificate")
-var tlsServerName = flag.String("tls-server-name", "", "if provided, enables manadatory verified TLS mode and overrides the server name to verify as the CN or SAN of the leaf certificate (and present in SNI)")
-var tlsVerified = flag.Bool("tls", false, "if provided, enables manadatory verified TLS mode")
-var tlsInsecure = flag.Bool("tls-insecure", false, "if true, enables tls mode for communicating with the server, but does not verify the server's certificate")
-
-var timeoutSecs = flag.Int("timeout-secs", 30, "the number of seconds the entire command has to run before it timeouts and exits non-zero")
-var waitForReadySecs = flag.Int("wait-for-ready-secs", 50, "the number of seconds to wait for a single pod to become ready when performing a rollingrestart until we consider the operation failed")
-
-var tlsConfigName string
-
-var object string
-
 const subcommands = `
 SUBCOMMANDS
 
@@ -60,76 +44,14 @@ SUBCOMMANDS
 `
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n\n", os.Args[0])
-		fmt.Fprintf(flag.CommandLine.Output(), "  %s [COMMON OPTIONS...] subcommand statefulset_name\n\nCOMMON OPTIONS\n\n", os.Args[0])
-		flag.PrintDefaults()
-		fmt.Fprint(flag.CommandLine.Output(), subcommands)
+	var cfg Config
+	cfg.Parse(flag.CommandLine, os.Args[1:])
+
+	if cfg.TLSConfig != nil {
+		mysql.RegisterTLSConfig("custom", cfg.TLSConfig)
 	}
 
-	flag.Parse()
-
-	if *tlsInsecure && *tlsVerified {
-		fmt.Fprintf(flag.CommandLine.Output(), "Cannot provide -tls and -tls-insecure.\n\n")
-		flag.Usage()
-		os.Exit(2)
-	}
-	if *tlsInsecure && *tlsServerName != "" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Cannot provide -tls-insecure and -tls-server-name.\n\n")
-		flag.Usage()
-		os.Exit(2)
-	}
-	if *tlsInsecure && *tlsCaPath != "" {
-		fmt.Fprintf(flag.CommandLine.Output(), "Cannot provide -tls-insecure and -tls-ca.\n\n")
-		flag.Usage()
-		os.Exit(2)
-	}
-
-	if *tlsCaPath != "" || *tlsServerName != "" {
-		// We register a custom TLS Config with the MySQL driver.
-		cfg := &tls.Config{}
-		if *tlsCaPath != "" {
-			rootCertPool := x509.NewCertPool()
-			pem, err := ioutil.ReadFile(*tlsCaPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to read tls-ca %s: %v\n", *tlsCaPath, err)
-				os.Exit(1)
-			}
-			if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-				fmt.Fprintf(os.Stderr, "Failed to append PEM from %s.\n", *tlsCaPath)
-				os.Exit(1)
-			}
-			cfg.RootCAs = rootCertPool
-		}
-		cfg.ServerName = *tlsServerName
-		mysql.RegisterTLSConfig("custom", cfg)
-		tlsConfigName = "custom"
-	}
-
-	cmdstr := flag.Arg(0)
-	object = flag.Arg(1)
-
-	if flag.NArg() != 2 {
-		flag.Usage()
-		os.Exit(2)
-	}
-
-	var cmd Command
-	if cmdstr == "applyprimarylabels" {
-		cmd = ApplyPrimaryLabels{}
-	} else if cmdstr == "gracefulfailover" {
-		cmd = GracefulFailover{}
-	} else if cmdstr == "promotestandby" {
-		cmd = PromoteStandby{}
-	} else if cmdstr == "rollingrestart" {
-		cmd = RollingRestart{}
-	} else {
-		fmt.Fprintf(flag.CommandLine.Output(), "Did not find subcommand %s\n\n", cmdstr)
-		flag.Usage()
-		os.Exit(2)
-	}
-
-	fmt.Printf("running %s against %s/%s\n", cmdstr, *namespace, object)
+	fmt.Printf("running %s against %s/%s\n", cfg.CommandStr, cfg.Namespace, cfg.StatefulSetName)
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -140,34 +62,38 @@ func main() {
 		panic(err.Error())
 	}
 
-	ctx, f := context.WithDeadline(context.TODO(), time.Now().Add(time.Duration(*timeoutSecs)*time.Second))
+	ctx, f := context.WithDeadline(context.TODO(), time.Now().Add(cfg.Timeout))
 	defer f()
-	if err := cmd.Run(ctx, clientset); err != nil {
+	if err := cfg.Command.Run(ctx, &cfg, clientset); err != nil {
 		panic(err.Error())
 	}
 }
 
 type State struct {
+	Cfg         *Config
 	Clientset   *kubernetes.Clientset
 	StatefulSet *appsv1.StatefulSet
 	Pods        []*corev1.Pod
 }
 
-func LoadStatefulSet(ctx context.Context, clientset *kubernetes.Clientset, namespace, name string) (*State, error) {
-	s := &State{Clientset: clientset}
+func LoadStatefulSet(ctx context.Context, cfg *Config, clientset *kubernetes.Clientset) (*State, error) {
+	s := &State{
+		Cfg:       cfg,
+		Clientset: clientset,
+	}
 
 	var err error
-	s.StatefulSet, err = clientset.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	s.StatefulSet, err = clientset.AppsV1().StatefulSets(cfg.Namespace).Get(ctx, cfg.StatefulSetName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("error loading StatefulSet %s/%s: %w", namespace, name, err)
+		return nil, fmt.Errorf("error loading StatefulSet %s/%s: %w", cfg.Namespace, cfg.StatefulSetName, err)
 	}
 
 	s.Pods = make([]*corev1.Pod, s.Replicas())
 	for i := range s.Pods {
-		podname := name + "-" + strconv.Itoa(i)
-		s.Pods[i], err = clientset.CoreV1().Pods(namespace).Get(ctx, podname, metav1.GetOptions{})
+		podname := cfg.StatefulSetName + "-" + strconv.Itoa(i)
+		s.Pods[i], err = clientset.CoreV1().Pods(cfg.Namespace).Get(ctx, podname, metav1.GetOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("error loading Pod %s/%s for StatefulSet %s/%s: %w", namespace, podname, namespace, name, err)
+			return nil, fmt.Errorf("error loading Pod %s/%s for StatefulSet %s/%s: %w", cfg.Namespace, podname, cfg.Namespace, cfg.StatefulSetName, err)
 		}
 	}
 
@@ -209,11 +135,11 @@ func (s *State) ServiceName() string {
 func (s *State) DB(i int) (*sql.DB, error) {
 	hostname := s.PodHostname(i)
 	port := s.Port()
-	dsn := RenderDSN(hostname, port)
+	dsn := RenderDSN(s.Cfg, hostname, port)
 	return sql.Open("mysql", dsn)
 }
 
-func RenderDSN(hostname string, port int) string {
+func RenderDSN(cfg *Config, hostname string, port int) string {
 	user := os.Getenv("DOLT_USERNAME")
 	if user == "" {
 		user = "root"
@@ -224,11 +150,12 @@ func RenderDSN(hostname string, port int) string {
 		authority += ":" + pass
 	}
 	params := ""
-	if *tlsInsecure {
+	if cfg.TLSInsecure {
 		params += "?tls=skip-verify"
-	} else if tlsConfigName != "" {
-		params += "?tls=" + tlsConfigName
-	} else if *tlsVerified {
+	} else if cfg.TLSConfig != nil {
+		// TODO: This is spookily coupled to the config name in main
+		params += "?tls=custom"
+	} else if cfg.TLSVerified {
 		params += "?tls=true"
 	}
 	return fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster%s", authority, hostname, port, params)
@@ -303,7 +230,7 @@ func LabelPrimary(ctx context.Context, s *State, i int) (bool, error) {
 		return false, nil
 	} else {
 		p.ObjectMeta.Labels[RoleLabel] = PrimaryRoleValue
-		np, err := s.Clientset.CoreV1().Pods(*namespace).Update(ctx, p, metav1.UpdateOptions{})
+		np, err := s.Clientset.CoreV1().Pods(s.Cfg.Namespace).Update(ctx, p, metav1.UpdateOptions{})
 		if err != nil {
 			return false, fmt.Errorf("error updating pod %s/%s to add dolthub.com/cluster_role=primary label: %w", p.Namespace, p.Name, err)
 		}
@@ -319,7 +246,7 @@ func LabelStandby(ctx context.Context, s *State, i int) (bool, error) {
 		return false, nil
 	} else {
 		p.ObjectMeta.Labels[RoleLabel] = StandbyRoleValue
-		np, err := s.Clientset.CoreV1().Pods(*namespace).Update(ctx, p, metav1.UpdateOptions{})
+		np, err := s.Clientset.CoreV1().Pods(s.Cfg.Namespace).Update(ctx, p, metav1.UpdateOptions{})
 		if err != nil {
 			return false, fmt.Errorf("error updating pod %s/%s to add dolthub.com/cluster_role=standby label: %w", p.Namespace, p.Name, err)
 		}
@@ -329,13 +256,13 @@ func LabelStandby(ctx context.Context, s *State, i int) (bool, error) {
 }
 
 type Command interface {
-	Run(context.Context, *kubernetes.Clientset) error
+	Run(context.Context, *Config, *kubernetes.Clientset) error
 }
 
 type ApplyPrimaryLabels struct{}
 
-func (cmd ApplyPrimaryLabels) Run(ctx context.Context, clientset *kubernetes.Clientset) error {
-	s, err := LoadStatefulSet(ctx, clientset, *namespace, object)
+func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *kubernetes.Clientset) error {
+	s, err := LoadStatefulSet(ctx, cfg, clientset)
 	if err != nil {
 		return err
 	}
@@ -409,12 +336,12 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, clientset *kubernetes.Cli
 
 type GracefulFailover struct{}
 
-func (cmd GracefulFailover) Run(ctx context.Context, clientset *kubernetes.Clientset) error {
-	s, err := LoadStatefulSet(ctx, clientset, *namespace, object)
+func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kubernetes.Clientset) error {
+	s, err := LoadStatefulSet(ctx, cfg, clientset)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", *namespace, object, len(s.Pods))
+	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	roles := make([]string, s.Replicas())
 	epochs := make([]int, s.Replicas())
@@ -535,12 +462,12 @@ func (cmd GracefulFailover) Run(ctx context.Context, clientset *kubernetes.Clien
 
 type PromoteStandby struct{}
 
-func (cmd PromoteStandby) Run(ctx context.Context, clientset *kubernetes.Clientset) error {
-	s, err := LoadStatefulSet(ctx, clientset, *namespace, object)
+func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kubernetes.Clientset) error {
+	s, err := LoadStatefulSet(ctx, cfg, clientset)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", *namespace, object, len(s.Pods))
+	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	roles := make([]string, s.Replicas())
 	epochs := make([]int, s.Replicas())
@@ -617,12 +544,12 @@ func (cmd PromoteStandby) Run(ctx context.Context, clientset *kubernetes.Clients
 type RollingRestart struct {
 }
 
-func (RollingRestart) Run(ctx context.Context, clientset *kubernetes.Clientset) error {
-	s, err := LoadStatefulSet(ctx, clientset, *namespace, object)
+func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernetes.Clientset) error {
+	s, err := LoadStatefulSet(ctx, cfg, clientset)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("loaded stateful set %s/%s with %d pods\n", *namespace, object, len(s.Pods))
+	fmt.Printf("loaded stateful set %s/%s with %d pods\n", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	dbstates := LoadDBStates(ctx, s)
 	curprimary := -1
@@ -661,7 +588,7 @@ func (RollingRestart) Run(ctx context.Context, clientset *kubernetes.Clientset) 
 		if err != nil {
 			return err
 		}
-		fmt.Printf("pod is ready %s/%s\n", *namespace, s.Pods[i].Name)
+		fmt.Printf("pod is ready %s/%s\n", cfg.Namespace, s.Pods[i].Name)
 	}
 
 	// Every standby has been restarted. We failover the primary to the
@@ -676,13 +603,13 @@ func (RollingRestart) Run(ctx context.Context, clientset *kubernetes.Clientset) 
 	if nextprimary == -1 {
 		return fmt.Errorf("failed to find a reachable standby to promote")
 	}
-	fmt.Printf("decided pod %s/%s will be next primary\n", *namespace, s.Pods[nextprimary].Name)
+	fmt.Printf("decided pod %s/%s will be next primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	_, err = LabelStandby(ctx, s, curprimary)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("labeled existing primary, %s/%s as standby\n", *namespace, s.Pods[curprimary].Name)
+	fmt.Printf("labeled existing primary, %s/%s as standby\n", cfg.Namespace, s.Pods[curprimary].Name)
 
 	err = func() error {
 		db, err := s.DB(curprimary)
@@ -701,7 +628,7 @@ func (RollingRestart) Run(ctx context.Context, clientset *kubernetes.Clientset) 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("made existing primary, %s/%s role standby\n", *namespace, s.Pods[curprimary].Name)
+	fmt.Printf("made existing primary, %s/%s role standby\n", cfg.Namespace, s.Pods[curprimary].Name)
 
 	err = func() error {
 		db, err := s.DB(nextprimary)
@@ -720,16 +647,16 @@ func (RollingRestart) Run(ctx context.Context, clientset *kubernetes.Clientset) 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("made new primary, %s/%s, role primary\n", *namespace, s.Pods[nextprimary].Name)
+	fmt.Printf("made new primary, %s/%s, role primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("labeled new primary, %s/%s, role primary\n", *namespace, s.Pods[nextprimary].Name)
+	fmt.Printf("labeled new primary, %s/%s, role primary\n", cfg.Namespace, s.Pods[nextprimary].Name)
 
 	err = DeleteAndWaitForReady(ctx, s, curprimary)
-	fmt.Printf("deleted old primary pod, %s/%s\n", *namespace, s.Pods[curprimary].Name)
+	fmt.Printf("deleted old primary pod, %s/%s\n", cfg.Namespace, s.Pods[curprimary].Name)
 
 	return err
 }
@@ -757,7 +684,7 @@ func LoadDBStates(ctx context.Context, s *State) []DBState {
 }
 
 func DeleteAndWaitForReady(ctx context.Context, s *State, i int) error {
-	pods := s.Clientset.CoreV1().Pods(*namespace)
+	pods := s.Clientset.CoreV1().Pods(s.Cfg.Namespace)
 	w, err := pods.Watch(ctx, metav1.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("metadata.name", s.Pods[i].Name).String(),
 	})
@@ -775,21 +702,21 @@ func DeleteAndWaitForReady(ctx context.Context, s *State, i int) error {
 					return
 				}
 			case <-ctx.Done():
-				fmt.Printf("poll for deletiong of pod %s/%s finished with ctx.Done()\n", *namespace, s.Pods[i].Name)
+				fmt.Printf("poll for deletiong of pod %s/%s finished with ctx.Done()\n", s.Cfg.Namespace, s.Pods[i].Name)
 				return
 			}
 		}
 	}()
-	fmt.Printf("deleting pod %s/%s\n", *namespace, s.Pods[i].Name)
+	fmt.Printf("deleting pod %s/%s\n", s.Cfg.Namespace, s.Pods[i].Name)
 	err = pods.Delete(ctx, s.Pods[i].Name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	<-done
-	fmt.Printf("we believe pod %s/%s is deleted\n", *namespace, s.Pods[i].Name)
+	fmt.Printf("we believe pod %s/%s is deleted\n", s.Cfg.Namespace, s.Pods[i].Name)
 
 	pollInterval := 100 * time.Millisecond
-	deadline := time.Now().Add(time.Duration(*waitForReadySecs) * time.Second)
+	deadline := time.Now().Add(s.Cfg.WaitForReady)
 PollPod:
 	for time.Now().Before(deadline) {
 		time.Sleep(pollInterval)
@@ -821,5 +748,5 @@ PollPod:
 		s.Pods[i] = p
 		return nil
 	}
-	return fmt.Errorf("error: pod %s/%s did not become Ready after deleting it", *namespace, s.Pods[i].Name)
+	return fmt.Errorf("error: pod %s/%s did not become Ready after deleting it", s.Cfg.Namespace, s.Pods[i].Name)
 }

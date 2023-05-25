@@ -35,7 +35,10 @@ nogo(
 
 go_library(
     name = "doltclusterctl_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "config.go",
+        "main.go",
+    ],
     importpath = "github.com/dolthub/doltclusterctl",
     visibility = ["//visibility:private"],
     deps = [
@@ -79,7 +82,11 @@ go_image(
 go_test(
     name = "doltclusterctl_test",
     size = "small",
-    srcs = ["main_test.go"],
+    srcs = [
+        "config_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
     embed = [":doltclusterctl_lib"],
     deps = ["@com_github_stretchr_testify//assert"],
 )
