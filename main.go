@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -279,22 +280,9 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 	}
 
 	// Find current primary across the pods.
-	highestepoch := 0
-	currentprimary := -1
-	for i := range dbstates {
-		if dbstates[i].Role == "primary" {
-			if currentprimary != -1 {
-				return fmt.Errorf("error apply primary labels, currently there is more than one primary, found pods: %s and %s", s.PodName(currentprimary), s.PodName(i))
-			}
-			currentprimary = i
-		}
-		if dbstates[i].Epoch > highestepoch {
-			highestepoch = dbstates[i].Epoch
-		}
-	}
-
-	if currentprimary == -1 {
-		return fmt.Errorf("error did not find a pod that was in role primary, cannot apply labels")
+	currentprimary, _, err := CurrentPrimaryAndEpoch(s, dbstates)
+	if err != nil {
+		return fmt.Errorf("cannot apply primary labels: %w", err)
 	}
 
 	// Apply the pod labels.
@@ -352,22 +340,9 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 
 	// Find current primary across the pods.
 
-	highestepoch := 0
-	currentprimary := -1
-	for i := range dbstates {
-		if dbstates[i].Role == "primary" {
-			if currentprimary != -1 {
-				return fmt.Errorf("error performing graceful failover, currently there is more than one primary, found pods: %s and %s", s.PodName(currentprimary), s.PodName(i))
-			}
-			currentprimary = i
-		}
-		if dbstates[i].Epoch > highestepoch {
-			highestepoch = dbstates[i].Epoch
-		}
-	}
-
-	if currentprimary == -1 {
-		return fmt.Errorf("error did not find a pod that was in role primary, cannot perform graceful failover")
+	currentprimary, highestepoch, err := CurrentPrimaryAndEpoch(s, dbstates)
+	if err != nil {
+		return fmt.Errorf("cannot perform graceful failover: %w", err)
 	}
 
 	nextprimary := (currentprimary + 1) % len(s.Pods)
@@ -475,28 +450,19 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	dbstates := LoadDBStates(ctx, s)
-	curprimary := -1
-	highestepoch := -1
+
 	for i := range dbstates {
 		if dbstates[i].Err != nil {
-			return fmt.Errorf("error loading role and epoch for %s: %w", s.PodName(i), dbstates[i].Err)
-		}
-		if dbstates[i].Role == "primary" {
-			if curprimary != -1 {
-				return fmt.Errorf("found more than one primary across the cluster, both %s and %s", s.PodName(curprimary), s.PodName(i))
-			}
-			curprimary = i
+			return fmt.Errorf("cannot perform rolling restart: %w", dbstates[i].Err)
 		}
 		if dbstates[i].Role == "detected_broken_config" {
-			return fmt.Errorf("found pod %s in detected_broken_config", s.PodName(i))
-		}
-		if dbstates[i].Epoch > highestepoch {
-			highestepoch = dbstates[i].Epoch
+			return fmt.Errorf("cannot perform rolling restart: found pod %s in detected_broken_config", s.PodName(i))
 		}
 	}
 
-	if curprimary == -1 {
-		return fmt.Errorf("could not find a current primary across the cluster; cannot perform a rolling restart")
+	curprimary, highestepoch, err := CurrentPrimaryAndEpoch(s, dbstates)
+	if err != nil {
+		return fmt.Errorf("cannot perform rolling restart: %w", err)
 	}
 
 	nextepoch := highestepoch + 1
@@ -568,8 +534,35 @@ func LoadDBStates(ctx context.Context, s *State) []DBState {
 	ret := make([]DBState, len(s.Pods))
 	for i := range s.Pods {
 		ret[i].Role, ret[i].Epoch, ret[i].Err = LoadRoleAndEpoch(ctx, s, i)
+		if ret[i].Err != nil {
+			ret[i].Err = fmt.Errorf("error loading role and epoch for %s: %w", s.PodName(i), ret[i].Err)
+		}
 	}
 	return ret
+}
+
+// Returns the current valid primary based on the dbstates. Returns an error if
+// there is no primary or if there is more than one primary.
+func CurrentPrimaryAndEpoch(s *State, dbstates []DBState) (int, int, error) {
+	highestepoch := 0
+	currentprimary := -1
+	for i := range dbstates {
+		if dbstates[i].Role == "primary" {
+			if currentprimary != -1 {
+				return -1, -1, fmt.Errorf("more than one reachable pod was in role primary: %s and %s", s.PodName(currentprimary), s.PodName(i))
+			}
+			currentprimary = i
+		}
+		if dbstates[i].Epoch > highestepoch {
+			highestepoch = dbstates[i].Epoch
+		}
+	}
+
+	if currentprimary == -1 {
+		return -1, -1, errors.New("no reachable pod was in role primary")
+	}
+
+	return currentprimary, highestepoch, nil
 }
 
 func DeleteAndWaitForReady(ctx context.Context, s *State, i int) error {
