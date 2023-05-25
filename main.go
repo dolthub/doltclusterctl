@@ -271,29 +271,25 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 		return err
 	}
 
-	roles := make([]string, s.Replicas())
-	epochs := make([]int, s.Replicas())
-	errors := make([]error, s.Replicas())
-
-	// Find current primary across the pods.
-	for i := range s.Pods {
-		roles[i], epochs[i], errors[i] = LoadRoleAndEpoch(ctx, s, i)
-		if errors[i] != nil {
-			log.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), errors[i])
+	dbstates := LoadDBStates(ctx, s)
+	for i, state := range dbstates {
+		if state.Err != nil {
+			log.Printf("WARNING: error loading role and epoch for pod %s: %v", s.PodName(i), state.Err)
 		}
 	}
 
+	// Find current primary across the pods.
 	highestepoch := 0
 	currentprimary := -1
-	for i := range roles {
-		if roles[i] == "primary" {
+	for i := range dbstates {
+		if dbstates[i].Role == "primary" {
 			if currentprimary != -1 {
 				return fmt.Errorf("error apply primary labels, currently there is more than one primary, found pods: %s and %s", s.PodName(currentprimary), s.PodName(i))
 			}
 			currentprimary = i
 		}
-		if epochs[i] > highestepoch {
-			highestepoch = epochs[i]
+		if dbstates[i].Epoch > highestepoch {
+			highestepoch = dbstates[i].Epoch
 		}
 	}
 
@@ -334,13 +330,9 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 	}
 	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
-	roles := make([]string, s.Replicas())
-	epochs := make([]int, s.Replicas())
-
-	// Find current primary across the pods.
-	for i := range s.Pods {
-		roles[i], epochs[i], err = LoadRoleAndEpoch(ctx, s, i)
-		if err != nil {
+	dbstates := LoadDBStates(ctx, s)
+	for i, state := range dbstates {
+		if state.Err != nil {
 			// TODO: For now this remains an error.
 			// GracefulFailover is going to require all
 			// standbys to be caught up on all databases.
@@ -354,21 +346,23 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, clientset *kub
 			// and doltclusterctl to pick a standby to
 			// become the new primary which is recent
 			// enough, this error can change.
-			return fmt.Errorf("error loading role and epoch for pod %s: %w", s.PodName(i), err)
+			return fmt.Errorf("error loading role and epoch for pod %s: %w", s.PodName(i), state.Err)
 		}
 	}
 
+	// Find current primary across the pods.
+
 	highestepoch := 0
 	currentprimary := -1
-	for i := range roles {
-		if roles[i] == "primary" {
+	for i := range dbstates {
+		if dbstates[i].Role == "primary" {
 			if currentprimary != -1 {
 				return fmt.Errorf("error performing graceful failover, currently there is more than one primary, found pods: %s and %s", s.PodName(currentprimary), s.PodName(i))
 			}
 			currentprimary = i
 		}
-		if epochs[i] > highestepoch {
-			highestepoch = epochs[i]
+		if dbstates[i].Epoch > highestepoch {
+			highestepoch = dbstates[i].Epoch
 		}
 	}
 
@@ -422,17 +416,12 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 	}
 	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
-	roles := make([]string, s.Replicas())
-	epochs := make([]int, s.Replicas())
-
 	// We ignore errors here, since we just want the first reachable standby.
-	for i := range s.Pods {
-		roles[i], epochs[i], _ = LoadRoleAndEpoch(ctx, s, i)
-	}
+	dbstates := LoadDBStates(ctx, s)
 
 	nextprimary := -1
 	for i := range s.Pods {
-		if roles[i] == "standby" {
+		if dbstates[i].Role == "standby" {
 			nextprimary = i
 			break
 		}
@@ -443,8 +432,8 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 
 	highestepoch := -1
 	for i := range s.Pods {
-		if epochs[i] > highestepoch {
-			highestepoch = epochs[i]
+		if dbstates[i].Epoch > highestepoch {
+			highestepoch = dbstates[i].Epoch
 		}
 	}
 	nextepoch := highestepoch + 1
