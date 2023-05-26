@@ -237,7 +237,7 @@ func LabelPrimary(ctx context.Context, s *State, i int) (bool, error) {
 		p.ObjectMeta.Labels[RoleLabel] = PrimaryRoleValue
 		np, err := s.Clientset.CoreV1().Pods(s.Cfg.Namespace).Update(ctx, p, metav1.UpdateOptions{})
 		if err != nil {
-			return false, fmt.Errorf("error updating pod %s/%s to add dolthub.com/cluster_role=primary label: %w", p.Namespace, p.Name, err)
+			return false, fmt.Errorf("error updating pod %s to add dolthub.com/cluster_role=primary label: %w", s.PodName(i), err)
 		}
 		s.Pods[i] = np
 	}
@@ -253,7 +253,7 @@ func LabelStandby(ctx context.Context, s *State, i int) (bool, error) {
 		p.ObjectMeta.Labels[RoleLabel] = StandbyRoleValue
 		np, err := s.Clientset.CoreV1().Pods(s.Cfg.Namespace).Update(ctx, p, metav1.UpdateOptions{})
 		if err != nil {
-			return false, fmt.Errorf("error updating pod %s/%s to add dolthub.com/cluster_role=standby label: %w", p.Namespace, p.Name, err)
+			return false, fmt.Errorf("error updating pod %s to add dolthub.com/cluster_role=standby label: %w", s.PodName(i), err)
 		}
 		s.Pods[i] = np
 	}
@@ -271,6 +271,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 	if err != nil {
 		return err
 	}
+	log.Printf("loaded stateful set %s/%s with %d pods", cfg.Namespace, cfg.StatefulSetName, len(s.Pods))
 
 	dbstates := LoadDBStates(ctx, s)
 	for i, state := range dbstates {
@@ -286,14 +287,14 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 	}
 
 	// Apply the pod labels.
-	for i, p := range s.Pods {
+	for i := range s.Pods {
 		if currentprimary == i {
 			ok, err := LabelPrimary(ctx, s, i)
 			if err != nil {
 				return err
 			}
 			if ok {
-				log.Printf("applied primary label to %s/%s", p.Namespace, p.Name)
+				log.Printf("applied primary label to %s", s.PodName(i))
 			}
 		} else {
 			ok, err := LabelStandby(ctx, s, i)
@@ -301,7 +302,7 @@ func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, clientset *k
 				return err
 			}
 			if ok {
-				log.Printf("removed primary label from %s/%s", p.Namespace, p.Name)
+				log.Printf("applied standby label to %s", s.PodName(i))
 			}
 		}
 	}
@@ -428,7 +429,7 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, clientset *kuber
 	if err != nil {
 		return err
 	}
-	log.Printf("called dolt_assume_cluster_role primary on: %s", s.PodName(nextprimary))
+	log.Printf("called dolt_assume_cluster_role primary on %s", s.PodName(nextprimary))
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
@@ -477,7 +478,7 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 		if err != nil {
 			return err
 		}
-		log.Printf("pod is ready %s/%s", cfg.Namespace, s.Pods[i].Name)
+		log.Printf("pod is ready %s", s.PodName(i))
 	}
 
 	// Every standby has been restarted. We failover the primary to the
@@ -492,36 +493,39 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, clientset *kubernete
 	if nextprimary == -1 {
 		return fmt.Errorf("failed to find a reachable standby to promote")
 	}
-	log.Printf("decided pod %s/%s will be next primary", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("decided pod %s will be next primary", s.PodName(nextprimary))
 
 	_, err = LabelStandby(ctx, s, curprimary)
 	if err != nil {
 		return err
 	}
-	log.Printf("labeled existing primary, %s/%s as standby", cfg.Namespace, s.Pods[curprimary].Name)
+	log.Printf("labeled existing primary, %s, as standby", s.PodName(curprimary))
 
 	err = CallAssumeRole(ctx, s, curprimary, "standby", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("made existing primary, %s/%s role standby", cfg.Namespace, s.Pods[curprimary].Name)
+	log.Printf("made existing primary, %s, role standby", s.PodName(curprimary))
 
 	err = CallAssumeRole(ctx, s, nextprimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("made new primary, %s/%s, role primary", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("made new primary, %s, role primary", s.PodName(nextprimary))
 
 	_, err = LabelPrimary(ctx, s, nextprimary)
 	if err != nil {
 		return err
 	}
-	log.Printf("labeled new primary, %s/%s, role primary", cfg.Namespace, s.Pods[nextprimary].Name)
+	log.Printf("labeled new primary, %s, role primary", s.PodName(nextprimary))
 
 	err = DeleteAndWaitForReady(ctx, s, curprimary)
-	log.Printf("deleted old primary pod, %s/%s", cfg.Namespace, s.Pods[curprimary].Name)
+	if err != nil {
+		return err
+	}
+	log.Printf("pod is ready %s", s.PodName(curprimary))
 
-	return err
+	return nil
 }
 
 type DBState struct {
@@ -584,18 +588,18 @@ func DeleteAndWaitForReady(ctx context.Context, s *State, i int) error {
 					return
 				}
 			case <-ctx.Done():
-				log.Printf("poll for deletiong of pod %s/%s finished with ctx.Done()", s.Cfg.Namespace, s.Pods[i].Name)
+				log.Printf("poll for deletiong of pod %s finished with ctx.Done()", s.PodName(i))
 				return
 			}
 		}
 	}()
-	log.Printf("deleting pod %s/%s", s.Cfg.Namespace, s.Pods[i].Name)
+	log.Printf("deleting pod %s", s.PodName(i))
 	err = pods.Delete(ctx, s.Pods[i].Name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	<-done
-	log.Printf("we believe pod %s/%s is deleted", s.Cfg.Namespace, s.Pods[i].Name)
+	log.Printf("pod %s successfully deleted", s.PodName(i))
 
 	pollInterval := 100 * time.Millisecond
 	deadline := time.Now().Add(s.Cfg.WaitForReady)
@@ -630,5 +634,5 @@ PollPod:
 		s.Pods[i] = p
 		return nil
 	}
-	return fmt.Errorf("error: pod %s/%s did not become Ready after deleting it", s.Cfg.Namespace, s.Pods[i].Name)
+	return fmt.Errorf("error: pod %s did not become Ready after deleting it", s.PodName(i))
 }
