@@ -17,15 +17,32 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+type mockCluster struct {
+	replicas int
+}
+
+func (c mockCluster) Name() string {
+	return fmt.Sprintf("mockCluster{%d}", c.replicas)
+}
+
+func (c mockCluster) NumReplicas() int {
+	return c.replicas
+}
+
+func (c mockCluster) Instance(i int) Instance {
+	return nil
+}
+
 func TestLoadDBStates(t *testing.T) {
-	t.Run("EmptyState", func(t *testing.T) {
-		res := LoadDBStates(context.Background(), &State{})
+	t.Run("ZeroReplicas", func(t *testing.T) {
+		res := LoadDBStates(context.Background(), &Config{}, mockCluster{0})
 		assert.Len(t, res, 0)
 
 	})

@@ -36,7 +36,11 @@ nogo(
 go_library(
     name = "doltclusterctl_lib",
     srcs = [
+        "cluster.go",
+        "commands.go",
         "config.go",
+        "db.go",
+        "kubernetes.go",
         "main.go",
     ],
     importpath = "github.com/dolthub/doltclusterctl",
