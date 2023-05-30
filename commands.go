@@ -28,21 +28,21 @@ type ApplyPrimaryLabels struct{}
 
 func (cmd ApplyPrimaryLabels) Run(ctx context.Context, cfg *Config, cluster Cluster) error {
 	dbstates := LoadDBStates(ctx, cfg, cluster)
-	for i, state := range dbstates {
+	for _, state := range dbstates {
 		if state.Err != nil {
-			log.Printf("WARNING: error loading role and epoch for pod %s: %v", cluster.Instance(i).Name(), state.Err)
+			log.Printf("WARNING: error loading role and epoch for pod %s: %v", state.Instance.Name(), state.Err)
 		}
 	}
 
 	// Find current primary across the pods.
-	currentprimary, _, err := CurrentPrimaryAndEpoch(cluster, dbstates)
+	currentprimary, _, err := CurrentPrimaryAndEpoch(dbstates)
 	if err != nil {
 		return fmt.Errorf("cannot apply primary labels: %w", err)
 	}
 
 	// Apply the pod labels.
-	for i := 0; i < cluster.NumReplicas(); i++ {
-		instance := cluster.Instance(i)
+	for i, state := range dbstates {
+		instance := state.Instance
 		if currentprimary == i {
 			if instance.Role() != RolePrimary {
 				err := instance.MarkRolePrimary(ctx)
@@ -69,7 +69,7 @@ type GracefulFailover struct{}
 
 func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluster) error {
 	dbstates := LoadDBStates(ctx, cfg, cluster)
-	for i, state := range dbstates {
+	for _, state := range dbstates {
 		if state.Err != nil {
 			// TODO: For now this remains an error.
 			// GracefulFailover is going to require all
@@ -84,12 +84,12 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 			// and doltclusterctl to pick a standby to
 			// become the new primary which is recent
 			// enough, this error can change.
-			return fmt.Errorf("error loading role and epoch for pod %s: %w", cluster.Instance(i).Name(), state.Err)
+			return fmt.Errorf("error loading role and epoch for pod %s: %w", state.Instance.Name(), state.Err)
 		}
 	}
 
 	// Find current primary across the pods.
-	currentprimary, highestepoch, err := CurrentPrimaryAndEpoch(cluster, dbstates)
+	currentprimary, highestepoch, err := CurrentPrimaryAndEpoch(dbstates)
 	if err != nil {
 		return fmt.Errorf("cannot perform graceful failover: %w", err)
 	}
@@ -97,10 +97,13 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 	nextprimary := (currentprimary + 1) % cluster.NumReplicas()
 	nextepoch := highestepoch + 1
 
-	log.Printf("failing over from %s to %s", cluster.Instance(currentprimary).Name(), cluster.Instance(nextprimary).Name())
+	oldPrimary := dbstates[currentprimary].Instance
+	newPrimary := dbstates[nextprimary].Instance
 
-	for i := 0; i < cluster.NumReplicas(); i++ {
-		err := cluster.Instance(i).MarkRoleStandby(ctx)
+	log.Printf("failing over from %s to %s", oldPrimary.Name(), newPrimary.Name())
+
+	for _, state := range dbstates {
+		err := state.Instance.MarkRoleStandby(ctx)
 		if err != nil {
 			return err
 		}
@@ -108,25 +111,25 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 
 	log.Printf("labeled all pods standby")
 
-	err = CallAssumeRole(ctx, cfg, cluster.Instance(currentprimary), "standby", nextepoch)
+	err = CallAssumeRole(ctx, cfg, oldPrimary, "standby", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("called dolt_assume_cluster_role standby on %s", cluster.Instance(currentprimary).Name())
+	log.Printf("called dolt_assume_cluster_role standby on %s", oldPrimary.Name())
 
-	err = CallAssumeRole(ctx, cfg, cluster.Instance(nextprimary), "primary", nextepoch)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("called dolt_assume_cluster_role primary on %s", cluster.Instance(nextprimary).Name())
-
-	err = cluster.Instance(nextprimary).MarkRolePrimary(ctx)
+	err = CallAssumeRole(ctx, cfg, newPrimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("added primary label to %s", cluster.Instance(nextprimary).Name())
+	log.Printf("called dolt_assume_cluster_role primary on %s", newPrimary.Name())
+
+	err = newPrimary.MarkRolePrimary(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("added primary label to %s", newPrimary.Name())
 
 	return nil
 }
@@ -156,10 +159,12 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, cluster Cluster)
 	}
 	nextepoch := highestepoch + 1
 
-	log.Printf("found standby to promote: %s", cluster.Instance(nextprimary).Name())
+	newPrimary := dbstates[nextprimary].Instance
 
-	for i := 0; i < cluster.NumReplicas(); i++ {
-		instance := cluster.Instance(i)
+	log.Printf("found standby to promote: %s", newPrimary.Name())
+
+	for _, state := range dbstates {
+		instance := state.Instance
 		err := instance.MarkRoleStandby(ctx)
 		if err != nil {
 			return err
@@ -168,17 +173,17 @@ func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, cluster Cluster)
 
 	log.Printf("labeled all pods as standby")
 
-	err := CallAssumeRole(ctx, cfg, cluster.Instance(nextprimary), "primary", nextepoch)
+	err := CallAssumeRole(ctx, cfg, newPrimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("called dolt_assume_cluster_role primary on %s", cluster.Instance(nextprimary).Name())
+	log.Printf("called dolt_assume_cluster_role primary on %s", newPrimary.Name())
 
-	err = cluster.Instance(nextprimary).MarkRolePrimary(ctx)
+	err = newPrimary.MarkRolePrimary(ctx)
 	if err != nil {
 		return err
 	}
-	log.Printf("applied primary label to %s", cluster.Instance(nextprimary).Name())
+	log.Printf("applied primary label to %s", newPrimary.Name())
 
 	return nil
 }
@@ -205,16 +210,16 @@ type RollingRestart struct {
 func (RollingRestart) Run(ctx context.Context, cfg *Config, cluster Cluster) error {
 	dbstates := LoadDBStates(ctx, cfg, cluster)
 
-	for i := range dbstates {
-		if dbstates[i].Err != nil {
-			return fmt.Errorf("cannot perform rolling restart: %w", dbstates[i].Err)
+	for _, state := range dbstates {
+		if state.Err != nil {
+			return fmt.Errorf("cannot perform rolling restart: %w", state.Err)
 		}
-		if dbstates[i].Role == "detected_broken_config" {
-			return fmt.Errorf("cannot perform rolling restart: found pod %s in detected_broken_config", cluster.Instance(i).Name())
+		if state.Role == "detected_broken_config" {
+			return fmt.Errorf("cannot perform rolling restart: found pod %s in detected_broken_config", state.Instance.Name())
 		}
 	}
 
-	curprimary, highestepoch, err := CurrentPrimaryAndEpoch(cluster, dbstates)
+	curprimary, highestepoch, err := CurrentPrimaryAndEpoch(dbstates)
 	if err != nil {
 		return fmt.Errorf("cannot perform rolling restart: %w", err)
 	}
@@ -226,8 +231,9 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, cluster Cluster) err
 		if i == curprimary {
 			continue
 		}
+		state := dbstates[i]
+		instance := state.Instance
 
-		instance := cluster.Instance(i)
 		restartCtx, cancel := context.WithTimeout(ctx, cfg.WaitForReady)
 		defer cancel()
 		err := instance.Restart(restartCtx)
@@ -255,46 +261,51 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, cluster Cluster) err
 	if nextprimary == -1 {
 		return fmt.Errorf("failed to find a reachable standby to promote")
 	}
-	log.Printf("decided pod %s will be next primary", cluster.Instance(nextprimary).Name())
 
-	err = cluster.Instance(curprimary).MarkRoleStandby(ctx)
+	oldPrimary := dbstates[curprimary].Instance
+	newPrimary := dbstates[nextprimary].Instance
+
+	log.Printf("decided pod %s will be next primary", newPrimary.Name())
+
+	err = oldPrimary.MarkRoleStandby(ctx)
 	if err != nil {
 		return err
 	}
-	log.Printf("labeled existing primary, %s, as standby", cluster.Instance(curprimary).Name())
+	log.Printf("labeled existing primary, %s, as standby", oldPrimary.Name())
 
-	err = CallAssumeRole(ctx, cfg, cluster.Instance(curprimary), "standby", nextepoch)
+	err = CallAssumeRole(ctx, cfg, oldPrimary, "standby", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("made existing primary, %s, role standby", cluster.Instance(curprimary).Name())
+	log.Printf("made existing primary, %s, role standby", oldPrimary.Name())
 
-	err = CallAssumeRole(ctx, cfg, cluster.Instance(nextprimary), "primary", nextepoch)
+	err = CallAssumeRole(ctx, cfg, newPrimary, "primary", nextepoch)
 	if err != nil {
 		return err
 	}
-	log.Printf("made new primary, %s, role primary", cluster.Instance(nextprimary).Name())
+	log.Printf("made new primary, %s, role primary", newPrimary.Name())
 
-	err = cluster.Instance(nextprimary).MarkRolePrimary(ctx)
+	err = newPrimary.MarkRolePrimary(ctx)
 	if err != nil {
 		return err
 	}
-	log.Printf("labeled new primary, %s, role primary", cluster.Instance(nextprimary).Name())
+	log.Printf("labeled new primary, %s, role primary", newPrimary.Name())
 
-	instance := cluster.Instance(curprimary)
+	// Finally restart the old primary.
+
 	restartCtx, cancel := context.WithTimeout(ctx, cfg.WaitForReady)
 	defer cancel()
-	err = instance.Restart(restartCtx)
+	err = oldPrimary.Restart(restartCtx)
 	if err != nil {
 		return err
 	}
 
-	err = WaitForDBReady(restartCtx, cfg, instance)
+	err = WaitForDBReady(restartCtx, cfg, oldPrimary)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("pod is ready %s", instance.Name())
+	log.Printf("pod is ready %s", oldPrimary.Name())
 
 	return nil
 }

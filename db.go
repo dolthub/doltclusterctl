@@ -88,66 +88,68 @@ func CallAssumeRole(ctx context.Context, cfg *Config, instance Instance, role st
 	return nil
 }
 
-func LoadRoleAndEpoch(ctx context.Context, cfg *Config, instance Instance) (string, int, error) {
+func LoadRoleAndEpoch(ctx context.Context, cfg *Config, instance Instance) DBState {
 	var role string
 	var epoch int
 
+	errf := func(err error) error {
+		return fmt.Errorf("error loading role and epoch for %s: %w", instance.Name(), err)
+	}
+
 	db, err := OpenDB(ctx, cfg, instance)
 	if err != nil {
-		return "", 0, err
+		return DBState{"", 0, instance, errf(err)}
 	}
 	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return "", 0, err
+		return DBState{"", 0, instance, errf(err)}
 	}
 	defer conn.Close()
 	rows, err := conn.QueryContext(ctx, "SELECT @@global.dolt_cluster_role, @@global.dolt_cluster_role_epoch")
 	if err != nil {
-		return "", 0, err
+		return DBState{"", 0, instance, errf(err)}
 	}
 	defer rows.Close()
 	if rows.Next() {
 		err = rows.Scan(&role, &epoch)
 		if err != nil {
-			return "", 0, err
+			return DBState{"", 0, instance, errf(err)}
 		}
 	}
 	if rows.Err() != nil {
-		return "", 0, rows.Err()
+		return DBState{"", 0, instance, errf(rows.Err())}
 	}
 
-	return role, epoch, nil
+	return DBState{role, epoch, instance, nil}
 }
 
 type DBState struct {
-	Role  string
-	Epoch int
-	Err   error
+	Role     string
+	Epoch    int
+	Instance Instance
+	Err      error
 }
 
 func LoadDBStates(ctx context.Context, cfg *Config, cluster Cluster) []DBState {
 	ret := make([]DBState, cluster.NumReplicas())
 	for i := 0; i < cluster.NumReplicas(); i++ {
 		instance := cluster.Instance(i)
-		ret[i].Role, ret[i].Epoch, ret[i].Err = LoadRoleAndEpoch(ctx, cfg, instance)
-		if ret[i].Err != nil {
-			ret[i].Err = fmt.Errorf("error loading role and epoch for %s: %w", instance.Name(), ret[i].Err)
-		}
+		ret[i] = LoadRoleAndEpoch(ctx, cfg, instance)
 	}
 	return ret
 }
 
 // Returns the current valid primary based on the dbstates. Returns an error if
 // there is no primary or if there is more than one primary.
-func CurrentPrimaryAndEpoch(cluster Cluster, dbstates []DBState) (int, int, error) {
+func CurrentPrimaryAndEpoch(dbstates []DBState) (int, int, error) {
 	highestepoch := 0
 	currentprimary := -1
 	for i := range dbstates {
 		if dbstates[i].Role == "primary" {
 			if currentprimary != -1 {
-				return -1, -1, fmt.Errorf("more than one reachable pod was in role primary: %s and %s", cluster.Instance(currentprimary).Name(), cluster.Instance(i).Name())
+				return -1, -1, fmt.Errorf("more than one reachable pod was in role primary: %s and %s", dbstates[currentprimary].Instance.Name(), dbstates[i].Instance.Name())
 			}
 			currentprimary = i
 		}
