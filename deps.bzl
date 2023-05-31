@@ -150,6 +150,14 @@ def go_dependencies():
         version = "v0.0.0-20160522181843-27f122750802",
     )
     go_repository(
+        name = "com_github_cenkalti_backoff_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cenkalti/backoff/v4",
+        sum = "h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=",
+        version = "v4.2.1",
+    )
+
+    go_repository(
         name = "com_github_census_instrumentation_opencensus_proto",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/census-instrumentation/opencensus-proto",

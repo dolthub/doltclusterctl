@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -15,15 +17,29 @@ import (
 )
 
 const DoltImage = "docker.io/bazel/e2e:dolt"
-const DoltClusterCtlImage = "docker.io/library/bazel/:image"
+const DoltClusterCtlImage = "docker.io/library/bazel:image"
+const InClusterImage = "docker.io/bazel/e2e/incluster:incluster"
+
+const InClusterPodName = "incluster"
 
 // A very simple test which attempts to run the dolt image in the cluster.
 func TestRunDoltSqlServer(t *testing.T) {
 	deploymentName := "dolt"
 
-	var deploymentKey, podKey string
+	var deploymentKey, podKey, serviceKey string
 
 	feature := features.New("Run dolt sql-server").
+		WithSetup("create service", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			service := newService(c.Namespace(), deploymentName)
+			client, err := c.NewClient()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := client.Resources().Create(ctx, service); err != nil {
+				t.Fatal(err)
+			}
+			return context.WithValue(ctx, &serviceKey, service)
+		}).
 		WithSetup("create deployment", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			deployment := newDeployment(c.Namespace(), deploymentName, 1)
 			client, err := c.NewClient()
@@ -40,8 +56,8 @@ func TestRunDoltSqlServer(t *testing.T) {
 
 			return context.WithValue(ctx, &deploymentKey, deployment)
 		}).
-		WithSetup("create pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			pod := newPod(c.Namespace(), "tail")
+		WithSetup("create test pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			pod := newPod(c.Namespace(), InClusterPodName)
 			client, err := c.NewClient()
 			if err != nil {
 				t.Fatal(err)
@@ -56,7 +72,23 @@ func TestRunDoltSqlServer(t *testing.T) {
 
 			return context.WithValue(ctx, &podKey, pod)
 		}).
-		WithTeardown("delete pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		Assess("TestConnectToService", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			client, err := c.NewClient()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			command := []string{"/app/e2e/incluster/incluster_test", "-test.v", "-test.run", "TestConnectToService"}
+
+			if err := client.Resources().ExecInPod(context.TODO(), c.Namespace(), InClusterPodName, "tail", command, &stdout, &stderr); err != nil {
+				t.Log(stderr.String())
+				t.Log(stdout.String())
+				t.Fatal(err)
+			}
+
+			return ctx
+		}).
+		WithTeardown("delete test pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			if v := ctx.Value(&podKey); v != nil {
 				pod := v.(*v1.Pod)
 				client, err := c.NewClient()
@@ -82,6 +114,19 @@ func TestRunDoltSqlServer(t *testing.T) {
 			}
 			return ctx
 		}).
+		WithTeardown("delete service", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if v := ctx.Value(&serviceKey); v != nil {
+				service := v.(*v1.Service)
+				client, err := c.NewClient()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := client.Resources().Delete(ctx, service); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return ctx
+		}).
 		Feature()
 	testenv.Test(t, feature)
 }
@@ -92,8 +137,23 @@ func newPod(namespace string, name string) *v1.Pod {
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
 				Name:    "tail",
-				Image:   DoltImage,
+				Image:   InClusterImage,
 				Command: []string{"/bin/tail", "-f", "/dev/null"},
+			}},
+		},
+	}
+}
+
+func newService(namespace string, name string) *v1.Service {
+	labels := map[string]string{"app": "dolt"}
+	return &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: v1.ServiceSpec{
+			Selector: labels,
+			Ports: []v1.ServicePort{{
+				Name:       "dolt",
+				Port:       3306,
+				TargetPort: intstr.FromInt(3306),
 			}},
 		},
 	}
@@ -114,7 +174,7 @@ func newDeployment(namespace string, name string, replicas int32) *appsv1.Deploy
 					Containers: []v1.Container{{
 						Name:    "dolt",
 						Image:   DoltImage,
-						Command: []string{"/usr/local/bin/dolt", "sql-server"},
+						Command: []string{"/usr/local/bin/dolt", "sql-server", "-H", "0.0.0.0"},
 						Ports: []v1.ContainerPort{{
 							Name:          "dolt",
 							ContainerPort: 3306,
