@@ -159,3 +159,19 @@ http_archive(
         "https://github.com/bazelbuild/buildtools/archive/refs/tags/4.2.2.tar.gz",
     ],
 )
+
+#############################
+# Dolt release for e2e tests
+#############################
+
+http_archive(
+    name = "dolt_release_linux_amd64",
+    build_file_content = """
+exports_files(["bin/dolt"])
+""",
+    sha256 = "218b92ca12b5785d37796311c16315aa37bf960064bb8ffa3315864273e59fa7",
+    strip_prefix = "dolt-linux-amd64",
+    urls = [
+        "https://github.com/dolthub/dolt/releases/download/v1.2.1/dolt-linux-amd64.tar.gz",
+    ],
+)

@@ -1,22 +1,42 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
 go_test(
     name = "e2e_test",
-    srcs = ["main_test.go"],
-    deps = [
-        "@io_k8s_sigs_e2e_framework//pkg/env:go_default_library",
-        "@io_k8s_sigs_e2e_framework//pkg/envconf:go_default_library",
-        "@io_k8s_sigs_e2e_framework//pkg/envfuncs:go_default_library",
+    srcs = [
+        "main_test.go",
+        "rundolt_test.go",
     ],
     tags = ["manual"],
+    deps = [
+        "@io_k8s_api//apps/v1:apps",
+        "@io_k8s_api//core/v1:core",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:meta",
+        "@io_k8s_sigs_e2e_framework//klient/wait",
+        "@io_k8s_sigs_e2e_framework//klient/wait/conditions",
+        "@io_k8s_sigs_e2e_framework//pkg/env",
+        "@io_k8s_sigs_e2e_framework//pkg/envconf",
+        "@io_k8s_sigs_e2e_framework//pkg/envfuncs",
+        "@io_k8s_sigs_e2e_framework//pkg/features",
+    ],
 )
 
 sh_test(
     name = "run_e2e",
     srcs = ["run.sh"],
     data = [
+        ":dolt.tar",
         ":e2e_test",
+        "//:image.tar",
         "@go_sdk//:files",
     ],
     tags = ["manual"],
+)
+
+container_image(
+    name = "dolt",
+    base = "@ubuntu2004//image",
+    directory = "/usr/local/bin",
+    files = ["@dolt_release_linux_amd64//:bin/dolt"],
+    visibility = ["//visibility:private"],
 )
