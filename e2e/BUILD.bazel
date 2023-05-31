@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "e2e_test",
+    srcs = ["main_test.go"],
+    deps = [
+        "@io_k8s_sigs_e2e_framework//pkg/env:go_default_library",
+        "@io_k8s_sigs_e2e_framework//pkg/envconf:go_default_library",
+        "@io_k8s_sigs_e2e_framework//pkg/envfuncs:go_default_library",
+    ],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "run_e2e",
+    srcs = ["run.sh"],
+    data = [
+        ":e2e_test",
+        "@go_sdk//:files",
+    ],
+    tags = ["manual"],
+)
