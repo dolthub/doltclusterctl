@@ -10,7 +10,7 @@ const DoltClusterCtlImage = "docker.io/library/doltclusterctl:latest"
 
 // A very simple test which attempts to run the dolt image in the cluster.
 func TestRunDoltDeployment(t *testing.T) {
-	feature := features.New("Run dolt sql-server").
+	feature := features.New("DoltDeployment").
 		WithSetup("create deployment", CreateDeployment).
 		WithTeardown("delete deployment", DeleteDeployment).
 		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).
@@ -19,7 +19,7 @@ func TestRunDoltDeployment(t *testing.T) {
 }
 
 func TestRunDoltStatefulSet(t *testing.T) {
-	feature := features.New("Run dolt sql-server").
+	feature := features.New("DoltStatefulSet").
 		WithSetup("create statefulset", CreateStatefulSet).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).

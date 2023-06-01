@@ -94,7 +94,7 @@ func RunUnitTestInCluster(flags ...string) features.Func {
 		if err := client.Resources().ExecInPod(context.TODO(), pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Spec.Containers[0].Name, command, &stdout, &stderr); err != nil {
 			t.Log(stderr.String())
 			t.Log(stdout.String())
-			t.Fatal(err)
+			t.Errorf("error running %v in test pod: %v", command, err)
 		}
 		return ctx
 	}

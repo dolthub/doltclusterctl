@@ -5,10 +5,12 @@ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 go_test(
     name = "e2e_test",
     srcs = [
+        "applyprimarylabels_test.go",
         "configmap_test.go",
         "deployment_test.go",
         "main_test.go",
         "rundolt_test.go",
+        "serviceaccount_test.go",
         "services_test.go",
         "statefulset_test.go",
         "testpod_test.go",
@@ -16,7 +18,9 @@ go_test(
     tags = ["manual"],
     deps = [
         "@io_k8s_api//apps/v1:apps",
+        "@io_k8s_api//batch/v1:batch",
         "@io_k8s_api//core/v1:core",
+        "@io_k8s_api//rbac/v1:rbac",
         "@io_k8s_apimachinery//pkg/apis/meta/v1:meta",
         "@io_k8s_apimachinery//pkg/util/intstr",
         "@io_k8s_sigs_e2e_framework//klient/wait",

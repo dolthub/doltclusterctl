@@ -35,7 +35,12 @@ func DeleteDeployment(ctx context.Context, t *testing.T, c *envconf.Config) cont
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := client.Resources().Delete(ctx, deployment); err != nil {
+		err = client.Resources().Delete(ctx, deployment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = wait.For(conditions.New(client.Resources()).ResourceDeleted(deployment), wait.WithTimeout(time.Minute*1))
+		if err != nil {
 			t.Fatal(err)
 		}
 	}

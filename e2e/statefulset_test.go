@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
@@ -32,7 +33,12 @@ func DeleteStatefulSet(ctx context.Context, t *testing.T, c *envconf.Config) con
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := client.Resources().Delete(ctx, statefulset); err != nil {
+		err = client.Resources().Delete(ctx, statefulset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = wait.For(conditions.New(client.Resources()).ResourceDeleted(statefulset), wait.WithTimeout(time.Minute*1))
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
