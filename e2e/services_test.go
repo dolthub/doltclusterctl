@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +15,7 @@ type Services struct {
 	AllPods   *v1.Service
 	ReadOnly  *v1.Service
 	ReadWrite *v1.Service
+	Internal  *v1.Service
 }
 
 func WithServices(ctx context.Context, svcs Services) context.Context {
@@ -30,11 +30,11 @@ func GetServices(ctx context.Context) (Services, bool) {
 	}
 }
 
-func DeleteServices(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func DeleteServices(ctx context.Context, c *envconf.Config) (context.Context, error) {
 	if svcs, ok := GetServices(ctx); ok {
 		client, err := c.NewClient()
 		if err != nil {
-			t.Fatal(err)
+			return ctx, err
 		}
 		err = client.Resources().Delete(ctx, svcs.AllPods)
 		if ferr := client.Resources().Delete(ctx, svcs.ReadOnly); ferr != nil {
@@ -43,38 +43,49 @@ func DeleteServices(ctx context.Context, t *testing.T, c *envconf.Config) contex
 		if ferr := client.Resources().Delete(ctx, svcs.ReadWrite); ferr != nil {
 			err = ferr
 		}
+		if ferr := client.Resources().Delete(ctx, svcs.Internal); ferr != nil {
+			err = ferr
+		}
 		if err != nil {
-			t.Fatal(err)
+			return ctx, err
 		}
 	}
-	return ctx
+	return ctx, nil
 }
 
-func CreateServices(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func CreateServices(ctx context.Context, c *envconf.Config) (context.Context, error) {
 	var svcs Services
 	svcs.AllPods = NewDoltService(c.Namespace())
 	svcs.ReadOnly = NewDoltROService(c.Namespace())
 	svcs.ReadWrite = NewDoltRWService(c.Namespace())
+	svcs.Internal = NewDoltInternalService(c.Namespace())
 
 	client, err := c.NewClient()
 	if err != nil {
-		t.Fatal(err)
+		return ctx, err
 	}
 	if err := client.Resources().Create(ctx, svcs.AllPods); err != nil {
-		t.Fatal(err)
+		return ctx, err
 	}
 	if err := client.Resources().Create(ctx, svcs.ReadOnly); err != nil {
 		// Best effort cleanup
 		_ = client.Resources().Delete(ctx, svcs.AllPods)
-		t.Fatal(err)
+		return ctx, err
 	}
 	if err := client.Resources().Create(ctx, svcs.ReadWrite); err != nil {
 		// Best effort cleanup
 		_ = client.Resources().Delete(ctx, svcs.AllPods)
 		_ = client.Resources().Delete(ctx, svcs.ReadOnly)
-		t.Fatal(err)
+		return ctx, err
 	}
-	return WithServices(ctx, svcs)
+	if err := client.Resources().Create(ctx, svcs.Internal); err != nil {
+		// Best effort cleanup
+		_ = client.Resources().Delete(ctx, svcs.AllPods)
+		_ = client.Resources().Delete(ctx, svcs.ReadOnly)
+		_ = client.Resources().Delete(ctx, svcs.ReadWrite)
+		return ctx, err
+	}
+	return WithServices(ctx, svcs), nil
 }
 
 func NewDoltROService(namespace string) *v1.Service {
@@ -118,6 +129,22 @@ func NewDoltService(namespace string) *v1.Service {
 				Port:       3306,
 				TargetPort: intstr.FromInt(3306),
 			}},
+		},
+	}
+}
+
+func NewDoltInternalService(namespace string) *v1.Service {
+	labels := map[string]string{"app": "dolt"}
+	return &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "dolt-internal", Namespace: namespace},
+		Spec: v1.ServiceSpec{
+			Selector: labels,
+			Ports: []v1.ServicePort{{
+				Name:       "dolt",
+				Port:       3306,
+				TargetPort: intstr.FromInt(3306),
+			}},
+			ClusterIP: "None",
 		},
 	}
 }

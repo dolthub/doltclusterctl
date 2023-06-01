@@ -32,36 +32,36 @@ func GetTestPod(ctx context.Context) (*v1.Pod, bool) {
 	}
 }
 
-func CreateTestPod(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func CreateTestPod(ctx context.Context, c *envconf.Config) (context.Context, error) {
 	pod := NewTestPod(c.Namespace())
 	client, err := c.NewClient()
 	if err != nil {
-		t.Fatal(err)
+		return ctx, err
 	}
 	if err := client.Resources().Create(ctx, pod); err != nil {
-		t.Fatal(err)
+		return ctx, err
 	}
 	err = wait.For(conditions.New(client.Resources()).PodReady(pod), wait.WithTimeout(time.Minute*1))
 	if err != nil {
 		// Best effort cleanup
 		_ = client.Resources().Delete(ctx, pod)
-		t.Fatal(err)
+		return ctx, err
 	}
 
-	return WithTestPod(ctx, pod)
+	return WithTestPod(ctx, pod), nil
 }
 
-func DeleteTestPod(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func DeleteTestPod(ctx context.Context, c *envconf.Config) (context.Context, error) {
 	if pod, ok := GetTestPod(ctx); ok {
 		client, err := c.NewClient()
 		if err != nil {
-			t.Fatal(err)
+			return ctx, err
 		}
 		if err := client.Resources().Delete(ctx, pod); err != nil {
-			t.Fatal(err)
+			return ctx, err
 		}
 	}
-	return ctx
+	return ctx, nil
 }
 
 func NewTestPod(namespace string) *v1.Pod {

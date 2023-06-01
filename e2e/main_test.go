@@ -26,9 +26,13 @@ func TestMain(m *testing.M) {
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLTCLUSTERCTL_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLT_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("INCLUSTER_TAR")),
+		CreateServices,
+		CreateTestPod,
 	)
 
 	testenv.Finish(
+		DeleteTestPod,
+		DeleteServices,
 		envfuncs.DeleteNamespace(namespace),
 	)
 
