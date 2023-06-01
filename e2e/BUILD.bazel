@@ -5,6 +5,7 @@ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 go_test(
     name = "e2e_test",
     srcs = [
+        "deployment_test.go",
         "main_test.go",
         "rundolt_test.go",
         "services_test.go",
