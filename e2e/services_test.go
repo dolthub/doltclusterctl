@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
-var ServiceKey struct{}
+var ServiceKey *struct{}
 
 type Services struct {
 	AllPods   *v1.Service
@@ -24,7 +24,7 @@ func WithServices(ctx context.Context, svcs Services) context.Context {
 
 func GetServices(ctx context.Context) (Services, bool) {
 	if v := ctx.Value(&ServiceKey); v != nil {
-		return ctx.Value(&ServiceKey).(Services), true
+		return v.(Services), true
 	} else {
 		return Services{}, false
 	}

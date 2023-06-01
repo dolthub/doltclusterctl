@@ -17,18 +17,18 @@ import (
 
 const DoltImage = "docker.io/library/dolt:latest"
 const DoltClusterCtlImage = "docker.io/library/doltclusterctl:latest"
-const InClusterImage = "docker.io/library/incluster:latest"
-
-const InClusterPodName = "incluster"
 
 // A very simple test which attempts to run the dolt image in the cluster.
 func TestRunDoltSqlServer(t *testing.T) {
 	deploymentName := "dolt"
 
-	var deploymentKey, podKey string
+	var deploymentKey string
 
 	feature := features.New("Run dolt sql-server").
 		WithSetup("create services", CreateServices).
+		WithTeardown("delete services", DeleteServices).
+		WithSetup("create test pod", CreateTestPod).
+		WithTeardown("delete test pod", DeleteTestPod).
 		WithSetup("create deployment", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			deployment := newDeployment(c.Namespace(), deploymentName, 1)
 			client, err := c.NewClient()
@@ -44,22 +44,6 @@ func TestRunDoltSqlServer(t *testing.T) {
 			}
 
 			return context.WithValue(ctx, &deploymentKey, deployment)
-		}).
-		WithSetup("create test pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			pod := newPod(c.Namespace(), InClusterPodName)
-			client, err := c.NewClient()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := client.Resources().Create(ctx, pod); err != nil {
-				t.Fatal(err)
-			}
-			err = wait.For(conditions.New(client.Resources()).PodReady(pod), wait.WithTimeout(time.Minute*5))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			return context.WithValue(ctx, &podKey, pod)
 		}).
 		Assess("TestConnectToService", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			client, err := c.NewClient()
@@ -77,19 +61,6 @@ func TestRunDoltSqlServer(t *testing.T) {
 
 			return ctx
 		}).
-		WithTeardown("delete test pod", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			if v := ctx.Value(&podKey); v != nil {
-				pod := v.(*v1.Pod)
-				client, err := c.NewClient()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := client.Resources().Delete(ctx, pod); err != nil {
-					t.Fatal(err)
-				}
-			}
-			return ctx
-		}).
 		WithTeardown("delete deployment", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			if v := ctx.Value(&deploymentKey); v != nil {
 				deployment := v.(*appsv1.Deployment)
@@ -103,23 +74,8 @@ func TestRunDoltSqlServer(t *testing.T) {
 			}
 			return ctx
 		}).
-		WithTeardown("delete services", DeleteServices).
 		Feature()
 	testenv.Test(t, feature)
-}
-
-func newPod(namespace string, name string) *v1.Pod {
-	return &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{{
-				Name:            "tail",
-				Image:           InClusterImage,
-				ImagePullPolicy: v1.PullNever,
-				Command:         []string{"/bin/tail", "-f", "/dev/null"},
-			}},
-		},
-	}
 }
 
 func newDeployment(namespace string, name string, replicas int32) *appsv1.Deployment {
