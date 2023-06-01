@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 go_test(
     name = "e2e_test",
@@ -23,7 +24,7 @@ go_test(
 )
 
 sh_test(
-    name = "run_e2e",
+    name = "e2e",
     srcs = ["run.sh"],
     data = [
         ":dolt.tar",
@@ -35,10 +36,22 @@ sh_test(
     tags = ["manual"],
 )
 
-container_image(
+pkg_tar(
+    name = "dolt_layer",
+    srcs = ["@dolt_release_linux_amd64//:bin/dolt"],
+    package_dir = "/usr/local/bin",
+)
+
+oci_image(
     name = "dolt",
-    base = "@ubuntu2004//image",
-    directory = "/usr/local/bin",
-    files = ["@dolt_release_linux_amd64//:bin/dolt"],
+    base = "@ubuntu2004",
+    tars = [":dolt_layer"],
+    visibility = ["//visibility:private"],
+)
+
+oci_tarball(
+    name = "dolt.tar",
+    image = ":dolt",
+    repo_tags = ["dolt:latest"],
     visibility = ["//visibility:private"],
 )

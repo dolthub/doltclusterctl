@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
-load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 go_test(
     name = "incluster_test",
@@ -12,10 +13,27 @@ go_test(
     ],
 )
 
-go_image(
+pkg_tar(
+    name = "incluster_layer",
+    testonly = True,
+    srcs = [
+        ":incluster_test",
+    ],
+    include_runfiles = True,
+    package_dir = "/app",
+)
+
+oci_image(
     name = "incluster",
     testonly = True,
-    base = "@ubuntu2004//image",
-    binary = ":incluster_test",
+    base = "@ubuntu2004",
+    tars = [":incluster_layer"],
+)
+
+oci_tarball(
+    name = "incluster.tar",
+    testonly = True,
+    image = ":incluster",
+    repo_tags = ["incluster:latest"],
     visibility = ["//visibility:public"],
 )

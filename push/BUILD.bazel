@@ -1,12 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@io_bazel_rules_docker//container:container.bzl", "container_push")
+load("@rules_oci//oci:defs.bzl", "oci_push")
 
-container_push(
+oci_push(
     name = "_push_public_image",
-    format = "OCI",
     image = "//:image",
-    registry = "public.ecr.aws",
-    repository = "dolthub/doltclusterctl",
+    remote_tags = ["latest"],
+    repository = "public.ecr.aws/dolthub/doltclusterctl",
     visibility = ["//visibility:private"],
 )
 

@@ -7,4 +7,4 @@ cd "$mydir"/..
 
 outpath=$(bazel info output_path)
 
-bazel run //e2e:run_e2e
+bazel run //e2e

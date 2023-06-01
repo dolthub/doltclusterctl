@@ -21,4 +21,6 @@ export AWS_CONFIG_FILE="${RUNFILES}/com_github_dolthub_doltclusterctl/push/awsco
 export AWS_PROFILE=imagewriter
 export DOCKER_CONFIG="${RUNFILES}/com_github_dolthub_doltclusterctl/push/"
 
-exec "${RUNFILES}/com_github_dolthub_doltclusterctl/push/_push_public_image"
+cd "${RUNFILES}/com_github_dolthub_doltclusterctl"
+
+exec "${RUNFILES}/com_github_dolthub_doltclusterctl/push/push__push_public_image.sh"
