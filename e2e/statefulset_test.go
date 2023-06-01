@@ -82,7 +82,7 @@ func NewStatefulSet(namespace string) *appsv1.StatefulSet {
 						Name:            "dolt",
 						Image:           DoltImage,
 						ImagePullPolicy: v1.PullNever,
-						Command:         []string{"/usr/local/bin/dolt", "sql-server", "-H", "0.0.0.0"},
+						Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
 						Ports: []v1.ContainerPort{{
 							Name:          "dolt",
 							ContainerPort: 3306,
@@ -105,21 +105,41 @@ func NewStatefulSet(namespace string) *appsv1.StatefulSet {
 dolt config --global --set metrics.disabled true
 dolt config --global --set user.email testing-doltclusterctl@example.com
 dolt config --global --set user.name "Testing doltcluster"
+cp /etc/dolt/"${POD_NAME}".yaml /var/doltdb/config.yaml
 `},
 						WorkingDir: "/var/doltdb",
 						Env: []v1.EnvVar{{
 							Name:  "DOLT_ROOT_PATH",
 							Value: "/var/doltdb",
+						}, {
+							Name: "POD_NAME",
+							ValueFrom: &v1.EnvVarSource{
+								FieldRef: &v1.ObjectFieldSelector{
+									FieldPath: "metadata.name",
+								},
+							},
 						}},
 						VolumeMounts: []v1.VolumeMount{{
 							Name:      "dolt-storage",
 							MountPath: "/var/doltdb",
+						}, {
+							Name:      "dolt-config",
+							MountPath: "/etc/dolt",
 						}},
 					}},
 					Volumes: []v1.Volume{{
 						Name: "dolt-storage",
 						VolumeSource: v1.VolumeSource{
 							EmptyDir: &v1.EmptyDirVolumeSource{},
+						},
+					}, {
+						Name: "dolt-config",
+						VolumeSource: v1.VolumeSource{
+							ConfigMap: &v1.ConfigMapVolumeSource{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: "dolt",
+								},
+							},
 						},
 					}},
 				},

@@ -22,15 +22,18 @@ func TestMain(m *testing.M) {
 
 	testenv.Setup(
 		envfuncs.CreateKindCluster(kindClusterName),
+		PatchCoreDNSConfigMap,
 		envfuncs.CreateNamespace(namespace),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLTCLUSTERCTL_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLT_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("INCLUSTER_TAR")),
 		CreateServices,
 		CreateTestPod,
+		CreateConfigMap,
 	)
 
 	testenv.Finish(
+		DeleteConfigMap,
 		DeleteTestPod,
 		DeleteServices,
 		envfuncs.DeleteNamespace(namespace),
