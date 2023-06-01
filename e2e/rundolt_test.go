@@ -9,16 +9,15 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const DoltImage = "docker.io/bazel/e2e:dolt"
-const DoltClusterCtlImage = "docker.io/library/bazel:image"
-const InClusterImage = "docker.io/bazel/e2e/incluster:incluster"
+const DoltImage = "docker.io/library/dolt:latest"
+const DoltClusterCtlImage = "docker.io/library/doltclusterctl:latest"
+const InClusterImage = "docker.io/library/incluster:latest"
 
 const InClusterPodName = "incluster"
 
@@ -26,20 +25,10 @@ const InClusterPodName = "incluster"
 func TestRunDoltSqlServer(t *testing.T) {
 	deploymentName := "dolt"
 
-	var deploymentKey, podKey, serviceKey string
+	var deploymentKey, podKey string
 
 	feature := features.New("Run dolt sql-server").
-		WithSetup("create service", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			service := newService(c.Namespace(), deploymentName)
-			client, err := c.NewClient()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := client.Resources().Create(ctx, service); err != nil {
-				t.Fatal(err)
-			}
-			return context.WithValue(ctx, &serviceKey, service)
-		}).
+		WithSetup("create services", CreateServices).
 		WithSetup("create deployment", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			deployment := newDeployment(c.Namespace(), deploymentName, 1)
 			client, err := c.NewClient()
@@ -78,7 +67,7 @@ func TestRunDoltSqlServer(t *testing.T) {
 				t.Fatal(err)
 			}
 			var stdout, stderr bytes.Buffer
-			command := []string{"/app/e2e/incluster/incluster_test", "-test.v", "-test.run", "TestConnectToService"}
+			command := []string{"/app/incluster_test", "-test.v", "-test.run", "TestConnectToService"}
 
 			if err := client.Resources().ExecInPod(context.TODO(), c.Namespace(), InClusterPodName, "tail", command, &stdout, &stderr); err != nil {
 				t.Log(stderr.String())
@@ -114,19 +103,7 @@ func TestRunDoltSqlServer(t *testing.T) {
 			}
 			return ctx
 		}).
-		WithTeardown("delete service", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			if v := ctx.Value(&serviceKey); v != nil {
-				service := v.(*v1.Service)
-				client, err := c.NewClient()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := client.Resources().Delete(ctx, service); err != nil {
-					t.Fatal(err)
-				}
-			}
-			return ctx
-		}).
+		WithTeardown("delete services", DeleteServices).
 		Feature()
 	testenv.Test(t, feature)
 }
@@ -136,24 +113,10 @@ func newPod(namespace string, name string) *v1.Pod {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
-				Name:    "tail",
-				Image:   InClusterImage,
-				Command: []string{"/bin/tail", "-f", "/dev/null"},
-			}},
-		},
-	}
-}
-
-func newService(namespace string, name string) *v1.Service {
-	labels := map[string]string{"app": "dolt"}
-	return &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-		Spec: v1.ServiceSpec{
-			Selector: labels,
-			Ports: []v1.ServicePort{{
-				Name:       "dolt",
-				Port:       3306,
-				TargetPort: intstr.FromInt(3306),
+				Name:            "tail",
+				Image:           InClusterImage,
+				ImagePullPolicy: v1.PullNever,
+				Command:         []string{"/bin/tail", "-f", "/dev/null"},
 			}},
 		},
 	}
@@ -172,9 +135,10 @@ func newDeployment(namespace string, name string, replicas int32) *appsv1.Deploy
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{{
-						Name:    "dolt",
-						Image:   DoltImage,
-						Command: []string{"/usr/local/bin/dolt", "sql-server", "-H", "0.0.0.0"},
+						Name:            "dolt",
+						Image:           DoltImage,
+						ImagePullPolicy: v1.PullNever,
+						Command:         []string{"/usr/local/bin/dolt", "sql-server", "-H", "0.0.0.0"},
 						Ports: []v1.ContainerPort{{
 							Name:          "dolt",
 							ContainerPort: 3306,
@@ -190,8 +154,9 @@ func newDeployment(namespace string, name string, replicas int32) *appsv1.Deploy
 						}},
 					}},
 					InitContainers: []v1.Container{{
-						Name:  "init-dolt",
-						Image: DoltImage,
+						Name:            "init-dolt",
+						Image:           DoltImage,
+						ImagePullPolicy: v1.PullNever,
 						Command: []string{"/bin/bash", "-c", `
 dolt config --global --set metrics.disabled true
 dolt config --global --set user.email testing-doltclusterctl@example.com
