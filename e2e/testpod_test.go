@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -10,10 +11,12 @@ import (
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
 const InClusterImage = "docker.io/library/incluster:latest"
 const InClusterPodName = "incluster"
+const InClusterContainerName = "incluster-test"
 
 var TestPodKey *struct{}
 
@@ -66,11 +69,33 @@ func NewTestPod(namespace string) *v1.Pod {
 		ObjectMeta: metav1.ObjectMeta{Name: InClusterPodName, Namespace: namespace},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
-				Name:            "tail",
+				Name:            InClusterContainerName,
 				Image:           InClusterImage,
 				ImagePullPolicy: v1.PullNever,
 				Command:         []string{"/bin/tail", "-f", "/dev/null"},
 			}},
 		},
+	}
+}
+
+func RunUnitTestInCluster(flags ...string) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		pod, ok := GetTestPod(ctx)
+		if !ok {
+			t.Fatal("did not find incluster test pod. must run in a step after CreateTestPod setup.")
+		}
+
+		client, err := c.NewClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		command := append([]string{"/app/incluster_test", "-test.v"}, flags...)
+		if err := client.Resources().ExecInPod(context.TODO(), pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Spec.Containers[0].Name, command, &stdout, &stderr); err != nil {
+			t.Log(stderr.String())
+			t.Log(stdout.String())
+			t.Fatal(err)
+		}
+		return ctx
 	}
 }

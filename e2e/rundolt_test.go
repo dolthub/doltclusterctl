@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -45,22 +44,7 @@ func TestRunDoltSqlServer(t *testing.T) {
 
 			return context.WithValue(ctx, &deploymentKey, deployment)
 		}).
-		Assess("TestConnectToService", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			client, err := c.NewClient()
-			if err != nil {
-				t.Fatal(err)
-			}
-			var stdout, stderr bytes.Buffer
-			command := []string{"/app/incluster_test", "-test.v", "-test.run", "TestConnectToService"}
-
-			if err := client.Resources().ExecInPod(context.TODO(), c.Namespace(), InClusterPodName, "tail", command, &stdout, &stderr); err != nil {
-				t.Log(stderr.String())
-				t.Log(stdout.String())
-				t.Fatal(err)
-			}
-
-			return ctx
-		}).
+		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).
 		WithTeardown("delete deployment", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			if v := ctx.Value(&deploymentKey); v != nil {
 				deployment := v.(*appsv1.Deployment)
