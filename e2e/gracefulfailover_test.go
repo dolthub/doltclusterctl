@@ -21,7 +21,7 @@ import (
 )
 
 func TestGracefulFailover(t *testing.T) {
-	feature := features.New("NewCluster").
+	newcluster := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
@@ -30,5 +30,30 @@ func TestGracefulFailover(t *testing.T) {
 		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
 		Feature()
-	testenv.Test(t, feature)
+	cycles := features.New("Cycles").
+		WithSetup("create statefulset", CreateStatefulSet()).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
+		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
+		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Feature()
+	counts := features.New("CountsUp").
+		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("dolt-2/IsPrimary", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "primary")).
+		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
+		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Feature()
+	testenv.Test(t, newcluster, cycles, counts)
 }
