@@ -15,7 +15,7 @@ import (
 )
 
 func TestApplyPrimaryLabels(t *testing.T) {
-	feature := features.New("ApplyPrimaryLabelsNewCluster").
+	feature := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).

@@ -246,6 +246,12 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, cluster Cluster) err
 			return err
 		}
 
+		// We need to relabel the pod, since we deleted it.
+		err = instance.MarkRoleStandby(ctx)
+		if err != nil {
+			return err
+		}
+
 		log.Printf("pod is ready %s", instance.Name())
 	}
 
@@ -301,6 +307,12 @@ func (RollingRestart) Run(ctx context.Context, cfg *Config, cluster Cluster) err
 	}
 
 	err = WaitForDBReady(restartCtx, cfg, oldPrimary)
+	if err != nil {
+		return err
+	}
+
+	// We need to relabel the pod, since we deleted it.
+	err = oldPrimary.MarkRoleStandby(ctx)
 	if err != nil {
 		return err
 	}
