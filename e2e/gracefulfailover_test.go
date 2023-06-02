@@ -55,5 +55,13 @@ func TestGracefulFailover(t *testing.T) {
 		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
 		Feature()
-	testenv.Test(t, newcluster, cycles, counts)
+	preservesdata := features.New("PreservesData").
+		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
+		Assess("CreateData", RunUnitTestInCluster("-test.run", "TestCreateSomeData", "-dbhostname", "dolt-rw")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("AssertData", RunUnitTestInCluster("-test.run", "TestAssertCreatedDataPresent", "-dbhostname", "dolt-rw")).
+		Feature()
+	testenv.Test(t, newcluster, cycles, counts, preservesdata)
 }

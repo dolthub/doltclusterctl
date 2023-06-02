@@ -21,7 +21,7 @@ import (
 )
 
 func TestRollingRestart(t *testing.T) {
-	feature := features.New("NewCluster").
+	newcluster := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunRollingRestart", RunDoltClusterCtlJob("rollingrestart", "dolt")).
@@ -31,5 +31,5 @@ func TestRollingRestart(t *testing.T) {
 		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
 		Feature()
-	testenv.Test(t, feature)
+	testenv.Test(t, newcluster)
 }
