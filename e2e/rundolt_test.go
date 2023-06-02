@@ -27,7 +27,7 @@ func TestRunDoltDeployment(t *testing.T) {
 	feature := features.New("DoltDeployment").
 		WithSetup("create deployment", CreateDeployment).
 		WithTeardown("delete deployment", DeleteDeployment).
-		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).
+		Assess("TestConnectToService", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService"})).
 		Feature()
 	testenv.Test(t, feature)
 }
@@ -36,9 +36,9 @@ func TestRunDoltStatefulSet(t *testing.T) {
 	feature := features.New("DoltStatefulSet").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).
-		Assess("TestConnectToService/dolt-0", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-0.dolt-internal")).
-		Assess("TestConnectToService/dolt-1", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-1.dolt-internal")).
+		Assess("TestConnectToService", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService"})).
+		Assess("TestConnectToService/dolt-0", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-0.dolt-internal"})).
+		Assess("TestConnectToService/dolt-1", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-1.dolt-internal"})).
 		Feature()
 	testenv.Test(t, feature)
 }

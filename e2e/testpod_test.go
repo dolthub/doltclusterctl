@@ -92,7 +92,12 @@ func NewTestPod(namespace string) *v1.Pod {
 	}
 }
 
-func RunUnitTestInCluster(flags ...string) features.Func {
+type InClusterTest struct {
+	TestName string
+	DBName   string
+}
+
+func RunUnitTestInCluster(test InClusterTest) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		pod, ok := GetTestPod(ctx)
 		if !ok {
@@ -104,7 +109,19 @@ func RunUnitTestInCluster(flags ...string) features.Func {
 			t.Fatal(err)
 		}
 		var stdout, stderr bytes.Buffer
-		command := append([]string{"/app/incluster_test", "-test.v"}, flags...)
+		command := []string{"/app/incluster_test", "-test.v", "-test.run", test.TestName}
+		if test.DBName != "" {
+			command = append(command, "-dbhostname", test.DBName)
+		}
+		if ss, ok := GetStatefulSet(ctx); ok {
+			config := ss.Config
+			if config.Username != "" {
+				command = append(command, "-username", config.Username)
+			}
+			if config.Password != "" {
+				command = append(command, "-password", config.Password)
+			}
+		}
 		if err := client.Resources().ExecInPod(context.TODO(), pod.ObjectMeta.Namespace, pod.ObjectMeta.Name, pod.Spec.Containers[0].Name, command, &stdout, &stderr); err != nil {
 			t.Log(stderr.String())
 			t.Log(stdout.String())

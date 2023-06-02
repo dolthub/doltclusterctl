@@ -28,6 +28,8 @@ import (
 )
 
 var DBHostname = flag.String("dbhostname", "dolt", "the database hostname")
+var Username = flag.String("username", "root", "the username to use in the connection")
+var Password = flag.String("password", "", "the password to use in the connection")
 
 func TestMain(t *testing.M) {
 	os.Exit(t.Run())
@@ -38,7 +40,7 @@ func TestConnectToService(t *testing.T) {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxElapsedTime = time.Second * 10
 	err := backoff.Retry(func() error {
-		db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s:3306)/", *DBHostname))
+		db, err := sql.Open("mysql", GetDSN())
 		if err != nil {
 			return err
 		}
@@ -53,11 +55,19 @@ func TestConnectToService(t *testing.T) {
 	}
 }
 
+func GetDSN() string {
+	auth := *Username
+	if *Password != "" {
+		auth += ":" + *Password
+	}
+	return fmt.Sprintf("%s@tcp(%s:3306)/", auth, *DBHostname)
+}
+
 func TestCreateSomeData(t *testing.T) {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxElapsedTime = time.Second * 10
 	err := backoff.Retry(func() error {
-		db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s:3306)/", *DBHostname))
+		db, err := sql.Open("mysql", GetDSN())
 		if err != nil {
 			return err
 		}
@@ -93,7 +103,7 @@ func TestAssertCreatedDataPresent(t *testing.T) {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxElapsedTime = time.Second * 10
 	err := backoff.Retry(func() error {
-		db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s:3306)/testdata", *DBHostname))
+		db, err := sql.Open("mysql", GetDSN())
 		if err != nil {
 			return err
 		}

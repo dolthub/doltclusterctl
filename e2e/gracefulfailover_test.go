@@ -27,8 +27,8 @@ func TestGracefulFailover(t *testing.T) {
 		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
-		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
-		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
 	cycles := features.New("Cycles").
 		WithSetup("create statefulset", CreateStatefulSet()).
@@ -36,13 +36,13 @@ func TestGracefulFailover(t *testing.T) {
 		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
-		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
-		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
-		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
-		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
 	counts := features.New("CountsUp").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
@@ -52,16 +52,16 @@ func TestGracefulFailover(t *testing.T) {
 		Assess("dolt-2/IsPrimary", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
-		Assess("Connect/dolt-rw", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-rw")).
-		Assess("Connect/dolt-ro", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-ro")).
+		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
+		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
 	preservesdata := features.New("PreservesData").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
-		Assess("CreateData", RunUnitTestInCluster("-test.run", "TestCreateSomeData", "-dbhostname", "dolt-rw")).
+		Assess("CreateData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeData", DBName: "dolt-rw"})).
 		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
-		Assess("AssertData", RunUnitTestInCluster("-test.run", "TestAssertCreatedDataPresent", "-dbhostname", "dolt-rw")).
+		Assess("AssertData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertCreatedDataPresent", DBName: "dolt-rw"})).
 		Feature()
 	testenv.Test(t, newcluster, cycles, counts, preservesdata)
 }

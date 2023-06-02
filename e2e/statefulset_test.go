@@ -31,6 +31,8 @@ import (
 
 type StatefulSetConfig struct {
 	NumReplicas int32
+	Username    string
+	Password    string
 }
 
 // Context state which represents the configuration and created resources for
@@ -93,6 +95,13 @@ type StatefulSetOption func(*StatefulSetConfig)
 func WithReplicas(count int32) StatefulSetOption {
 	return func(config *StatefulSetConfig) {
 		config.NumReplicas = count
+	}
+}
+
+func WithCredentials(username, password string) StatefulSetOption {
+	return func(config *StatefulSetConfig) {
+		config.Username = username
+		config.Password = password
 	}
 }
 
@@ -282,6 +291,14 @@ listener:
   port: 3306
   max_connections: 128
 `, role))
+	if config.Username != "" {
+		parts = append(parts, fmt.Sprintf(`user:
+  name: %s
+`, config.Username))
+		if config.Password != "" {
+			parts = append(parts, fmt.Sprintf("  password: %s\n", config.Password))
+		}
+	}
 	return strings.Join(parts, "")
 }
 
