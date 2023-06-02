@@ -34,7 +34,7 @@ func TestRunDoltDeployment(t *testing.T) {
 
 func TestRunDoltStatefulSet(t *testing.T) {
 	feature := features.New("DoltStatefulSet").
-		WithSetup("create statefulset", CreateStatefulSet).
+		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("TestConnectToService", RunUnitTestInCluster("-test.run", "TestConnectToService")).
 		Assess("TestConnectToService/dolt-0", RunUnitTestInCluster("-test.run", "TestConnectToService", "-dbhostname", "dolt-0.dolt-internal")).

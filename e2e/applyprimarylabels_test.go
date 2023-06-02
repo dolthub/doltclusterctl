@@ -30,7 +30,7 @@ import (
 
 func TestApplyPrimaryLabels(t *testing.T) {
 	feature := features.New("NewCluster").
-		WithSetup("create statefulset", CreateStatefulSet).
+		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).

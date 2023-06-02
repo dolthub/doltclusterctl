@@ -16,6 +16,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,143 +29,269 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
-var StatefulSetKey *struct{}
-
-func WithStatefulSet(ctx context.Context, statefulset *appsv1.StatefulSet) context.Context {
-	return context.WithValue(ctx, &StatefulSetKey, statefulset)
+type StatefulSetConfig struct {
+	NumReplicas int32
 }
 
-func GetStatefulSet(ctx context.Context) (*appsv1.StatefulSet, bool) {
-	if v := ctx.Value(&StatefulSetKey); v != nil {
-		return v.(*appsv1.StatefulSet), true
+// Context state which represents the configuration and created resources for
+// the StatefulSet.
+type StatefulSetState struct {
+	Config      StatefulSetConfig
+	StatefulSet *appsv1.StatefulSet
+	ConfigMaps  []*v1.ConfigMap
+}
+
+var StatefulSetStateKey *struct{}
+
+func WithStatefulSetState(ctx context.Context, state StatefulSetState) context.Context {
+	return context.WithValue(ctx, &StatefulSetStateKey, state)
+}
+
+func GetStatefulSet(ctx context.Context) (StatefulSetState, bool) {
+	if v := ctx.Value(&StatefulSetStateKey); v != nil {
+		return v.(StatefulSetState), true
 	} else {
-		return nil, false
+		return StatefulSetState{}, false
 	}
 }
 
 func DeleteStatefulSet(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-	if statefulset, ok := GetStatefulSet(ctx); ok {
+	if state, ok := GetStatefulSet(ctx); ok {
 		client, err := c.NewClient()
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = client.Resources().Delete(ctx, statefulset)
+		err = client.Resources().Delete(ctx, state.StatefulSet)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = wait.For(conditions.New(client.Resources()).ResourceDeleted(statefulset), wait.WithTimeout(time.Minute*1))
+		for _, cm := range state.ConfigMaps {
+			err = client.Resources().Delete(ctx, cm)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		deadline := time.Now().Add(1 * time.Minute)
+
+		err = wait.For(conditions.New(client.Resources()).ResourceDeleted(state.StatefulSet), wait.WithTimeout(deadline.Sub(time.Now())))
 		if err != nil {
 			t.Fatal(err)
+		}
+		for _, cm := range state.ConfigMaps {
+			err = wait.For(conditions.New(client.Resources()).ResourceDeleted(cm), wait.WithTimeout(deadline.Sub(time.Now())))
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	return ctx
 }
 
-func CreateStatefulSet(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-	statefulset := NewStatefulSet(c.Namespace())
-	client, err := c.NewClient()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := client.Resources().Create(ctx, statefulset); err != nil {
-		t.Fatal(err)
-	}
-	err = wait.For(func() (bool, error) {
-		if err := client.Resources().Get(context.TODO(), statefulset.GetName(), statefulset.GetNamespace(), statefulset); err != nil {
-			return false, err
-		}
-		if statefulset.Status.ReadyReplicas == 2 && statefulset.Status.AvailableReplicas == 2 && statefulset.Status.CurrentReplicas == 2 {
-			return true, nil
-		}
-		return false, nil
-	}, wait.WithTimeout(time.Minute*1))
-	if err != nil {
-		t.Fatal(err)
-	}
+type StatefulSetOption func(*StatefulSetConfig)
 
-	return WithStatefulSet(ctx, statefulset)
+func WithReplicas(count int32) StatefulSetOption {
+	return func(config *StatefulSetConfig) {
+		config.NumReplicas = count
+	}
 }
 
-func NewStatefulSet(namespace string) *appsv1.StatefulSet {
+func CreateStatefulSet(opts ...StatefulSetOption) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		var config StatefulSetConfig
+		for _, o := range opts {
+			o(&config)
+		}
+		statefulset, configmaps := NewStatefulSet(c.Namespace(), config)
+		client, err := c.NewClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := client.Resources().Create(ctx, statefulset); err != nil {
+			t.Fatal(err)
+		}
+		for _, cm := range configmaps {
+			if err := client.Resources().Create(ctx, cm); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var numReplicas int32 = 1
+		if statefulset.Spec.Replicas != nil {
+			numReplicas = *statefulset.Spec.Replicas
+		}
+		err = wait.For(func() (bool, error) {
+			if err := client.Resources().Get(context.TODO(), statefulset.GetName(), statefulset.GetNamespace(), statefulset); err != nil {
+				return false, err
+			}
+			if statefulset.Status.AvailableReplicas == numReplicas {
+				return true, nil
+			}
+			return false, nil
+		}, wait.WithTimeout(time.Minute*1))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return WithStatefulSetState(ctx, StatefulSetState{
+			Config:      config,
+			StatefulSet: statefulset,
+			ConfigMaps:  configmaps,
+		})
+	}
+}
+
+func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.StatefulSet, []*v1.ConfigMap) {
 	labels := map[string]string{"app": "dolt"}
-	var replicas int32 = 2
+	if config.NumReplicas == 0 {
+		config.NumReplicas = 2
+	}
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Replicas:    &replicas,
-			ServiceName: "dolt-internal",
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{{
-						Name:            "dolt",
-						Image:           DoltImage,
-						ImagePullPolicy: v1.PullNever,
-						Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
-						Ports: []v1.ContainerPort{{
-							Name:          "dolt",
-							ContainerPort: 3306,
+			ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
+			Spec: appsv1.StatefulSetSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: labels,
+				},
+				Replicas:            &config.NumReplicas,
+				ServiceName:         "dolt-internal",
+				PodManagementPolicy: appsv1.ParallelPodManagement,
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: labels},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{
+							Name:            "dolt",
+							Image:           DoltImage,
+							ImagePullPolicy: v1.PullNever,
+							Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
+							Ports: []v1.ContainerPort{{
+								Name:          "dolt",
+								ContainerPort: 3306,
+							}},
+							WorkingDir: "/var/doltdb",
+							Env: []v1.EnvVar{{
+								Name:  "DOLT_ROOT_PATH",
+								Value: "/var/doltdb",
+							}},
+							VolumeMounts: []v1.VolumeMount{{
+								Name:      "dolt-storage",
+								MountPath: "/var/doltdb",
+							}},
 						}},
-						WorkingDir: "/var/doltdb",
-						Env: []v1.EnvVar{{
-							Name:  "DOLT_ROOT_PATH",
-							Value: "/var/doltdb",
-						}},
-						VolumeMounts: []v1.VolumeMount{{
-							Name:      "dolt-storage",
-							MountPath: "/var/doltdb",
-						}},
-					}},
-					InitContainers: []v1.Container{{
-						Name:            "init-dolt",
-						Image:           DoltImage,
-						ImagePullPolicy: v1.PullNever,
-						Command: []string{"/bin/bash", "-c", `
+						InitContainers: []v1.Container{{
+							Name:            "init-dolt",
+							Image:           DoltImage,
+							ImagePullPolicy: v1.PullNever,
+							Command: []string{"/bin/bash", "-c", `
 dolt config --global --set metrics.disabled true
 dolt config --global --set user.email testing-doltclusterctl@example.com
 dolt config --global --set user.name "Testing doltcluster"
 cp /etc/dolt/"${POD_NAME}".yaml /var/doltdb/config.yaml
 `},
-						WorkingDir: "/var/doltdb",
-						Env: []v1.EnvVar{{
-							Name:  "DOLT_ROOT_PATH",
-							Value: "/var/doltdb",
+							WorkingDir: "/var/doltdb",
+							Env: []v1.EnvVar{{
+								Name:  "DOLT_ROOT_PATH",
+								Value: "/var/doltdb",
+							}, {
+								Name: "POD_NAME",
+								ValueFrom: &v1.EnvVarSource{
+									FieldRef: &v1.ObjectFieldSelector{
+										FieldPath: "metadata.name",
+									},
+								},
+							}},
+							VolumeMounts: []v1.VolumeMount{{
+								Name:      "dolt-storage",
+								MountPath: "/var/doltdb",
+							}, {
+								Name:      "dolt-config",
+								MountPath: "/etc/dolt",
+							}},
+						}},
+						Volumes: []v1.Volume{{
+							Name: "dolt-storage",
+							VolumeSource: v1.VolumeSource{
+								EmptyDir: &v1.EmptyDirVolumeSource{},
+							},
 						}, {
-							Name: "POD_NAME",
-							ValueFrom: &v1.EnvVarSource{
-								FieldRef: &v1.ObjectFieldSelector{
-									FieldPath: "metadata.name",
+							Name: "dolt-config",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "dolt",
+									},
 								},
 							},
 						}},
-						VolumeMounts: []v1.VolumeMount{{
-							Name:      "dolt-storage",
-							MountPath: "/var/doltdb",
-						}, {
-							Name:      "dolt-config",
-							MountPath: "/etc/dolt",
-						}},
-					}},
-					Volumes: []v1.Volume{{
-						Name: "dolt-storage",
-						VolumeSource: v1.VolumeSource{
-							EmptyDir: &v1.EmptyDirVolumeSource{},
-						},
-					}, {
-						Name: "dolt-config",
-						VolumeSource: v1.VolumeSource{
-							ConfigMap: &v1.ConfigMapVolumeSource{
-								LocalObjectReference: v1.LocalObjectReference{
-									Name: "dolt",
-								},
-							},
-						},
-					}},
+					},
 				},
 			},
-		},
+		}, []*v1.ConfigMap{
+			SqlServerConfigMap("dolt", namespace, config),
+		}
+}
+
+func TestSqlServerConfig(t *testing.T) {
+	expected := `log_level: trace
+cluster:
+  standby_remotes:
+  - name: dolt-1
+    remote_url_template: http://dolt-1.dolt-internal:50051/{database}
+  - name: dolt-2
+    remote_url_template: http://dolt-2.dolt-internal:50051/{database}
+  bootstrap_epoch: 1
+  bootstrap_role: primary
+  remotesapi:
+    port: 50051
+listener:
+  host: 0.0.0.0
+  port: 3306
+  max_connections: 128
+`
+	got := SqlServerConfig(0, StatefulSetConfig{NumReplicas: 3})
+	if got != expected {
+		t.Errorf("SqlServerConfig(0, 3) should not have been\n%sblah\nexpected\n\n%sblah", got, expected)
+	}
+}
+
+func StandbyRemoteStanza(num int32) string {
+	return fmt.Sprintf(`  - name: dolt-%d
+    remote_url_template: http://dolt-%d.dolt-internal:50051/{database}
+`, num, num)
+}
+
+func SqlServerConfig(this int32, config StatefulSetConfig) string {
+	var parts []string
+	parts = append(parts, `log_level: trace
+cluster:
+  standby_remotes:
+`)
+	for i := int32(0); i < config.NumReplicas; i++ {
+		if i != this {
+			parts = append(parts, StandbyRemoteStanza(i))
+		}
+	}
+	role := "standby"
+	if this == 0 {
+		role = "primary"
+	}
+	parts = append(parts, fmt.Sprintf(`  bootstrap_epoch: 1
+  bootstrap_role: %s
+  remotesapi:
+    port: 50051
+listener:
+  host: 0.0.0.0
+  port: 3306
+  max_connections: 128
+`, role))
+	return strings.Join(parts, "")
+}
+
+func SqlServerConfigMap(name, namespace string, config StatefulSetConfig) *v1.ConfigMap {
+	data := make(map[string]string)
+	for i := int32(0); i < config.NumReplicas; i++ {
+		data[fmt.Sprintf("dolt-%d.yaml", i)] = SqlServerConfig(i, config)
+	}
+	return &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Data:       data,
 	}
 }

@@ -22,7 +22,7 @@ import (
 
 func TestPromoteStandby(t *testing.T) {
 	feature := features.New("NewCluster").
-		WithSetup("create statefulset", CreateStatefulSet).
+		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPromoteStandby", RunDoltClusterCtlJob("promotestandby", "dolt")).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).

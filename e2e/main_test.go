@@ -44,11 +44,9 @@ func TestMain(m *testing.M) {
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("INCLUSTER_TAR")),
 		CreateServices,
 		CreateTestPod,
-		CreateConfigMap,
 	)
 
 	testenv.Finish(
-		DeleteConfigMap,
 		DeleteTestPod,
 		DeleteServices,
 		envfuncs.DeleteNamespace(namespace),
