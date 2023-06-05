@@ -67,12 +67,18 @@ func TestApplyPrimaryLabels(t *testing.T) {
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("-tls-insecure", "applyprimarylabels", "dolt"))).
 		Feature()
-	testenv.Test(t, feature, password, tlsinsecureagainstplaintext, tlsinsecureagainsttlsloose)
+	tlsca := features.New("TLSCA").
+		WithSetup("create statefulset", CreateStatefulSet(WithTLSMode(TLSModeRequired))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("-tls-ca", "/etc/doltcerts/roots.pem", "applyprimarylabels", "dolt"), WithTLSRoots())).
+		Feature()
+	testenv.Test(t, feature, password, tlsinsecureagainstplaintext, tlsinsecureagainsttlsloose, tlsca)
 }
 
 type DCCJob struct {
-	Args      []string
-	FailMatch string
+	Args         []string
+	FailMatch    string
+	WithTLSRoots bool
 }
 
 type DCCJobOption func(*DCCJob)
@@ -80,6 +86,12 @@ type DCCJobOption func(*DCCJob)
 func WithArgs(args ...string) DCCJobOption {
 	return func(job *DCCJob) {
 		job.Args = args
+	}
+}
+
+func WithTLSRoots() DCCJobOption {
+	return func(job *DCCJob) {
+		job.WithTLSRoots = true
 	}
 }
 
@@ -101,7 +113,7 @@ func RunDoltClusterCtlJob(opts ...DCCJobOption) features.Func {
 		config := state.Config
 
 		// Create the job.
-		job := NewDoltClusterCtlJob(name, c.Namespace(), config, dccjob.Args...)
+		job := NewDoltClusterCtlJob(name, c.Namespace(), config, dccjob)
 
 		client, err := c.NewClient()
 		if err != nil {
@@ -193,7 +205,7 @@ func JobCompletedOrFailed(resources *resources.Resources, job k8s.Object, succes
 	}
 }
 
-func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, args ...string) *batchv1.Job {
+func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, dccjob DCCJob) *batchv1.Job {
 	labels := map[string]string{"app": "doltclusterctl", "job": name}
 	// In real life, these would ValueFrom a secret, but this is fine for the test, at least for now.
 	var env []v1.EnvVar
@@ -210,7 +222,7 @@ func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, args
 		})
 	}
 	var backoff int32 = 0
-	return &batchv1.Job{
+	ret := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: &backoff,
@@ -222,7 +234,7 @@ func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, args
 						Name:            "doltclusterctl",
 						Image:           DoltClusterCtlImage,
 						ImagePullPolicy: v1.PullNever,
-						Command:         append([]string{"/usr/local/bin/doltclusterctl", "-n", namespace}, args...),
+						Command:         append([]string{"/usr/local/bin/doltclusterctl", "-n", namespace}, dccjob.Args...),
 						Env:             env,
 					}},
 					RestartPolicy: v1.RestartPolicyNever,
@@ -231,6 +243,25 @@ func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, args
 		},
 	}
 
+	if dccjob.WithTLSRoots {
+		ret.Spec.Template.Spec.Volumes = []v1.Volume{{
+			Name: "tls-roots",
+			VolumeSource: v1.VolumeSource{
+				ConfigMap: &v1.ConfigMapVolumeSource{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: "dolt-roots",
+					},
+				},
+			},
+		}}
+
+		ret.Spec.Template.Spec.Containers[0].VolumeMounts = []v1.VolumeMount{{
+			Name:      "tls-roots",
+			MountPath: "/etc/doltcerts",
+		}}
+	}
+
+	return ret
 }
 
 func AssertPodHasLabel(name, key, value string) features.Func {

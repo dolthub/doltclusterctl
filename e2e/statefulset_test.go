@@ -291,7 +291,7 @@ func ListenerStanza(config StatefulSetConfig) string {
   max_connections: 128
   tls_key: "/etc/dolt/key.pem"
   tls_cert: "/etc/dolt/chain.pem"
-  required_secure_transport: true`
+  require_secure_transport: true`
 	} else if config.TLSMode == TLSModeOptional {
 		return `listener:
   host: 0.0.0.0
@@ -345,6 +345,8 @@ func SqlServerConfigMaps(name, namespace string, config StatefulSetConfig) []*v1
 		data[fmt.Sprintf("dolt-%d.yaml", i)] = SqlServerConfig(i, config)
 	}
 
+	var ret []*v1.ConfigMap
+
 	if config.TLSMode != TLSModeNone {
 		bundle, err := NewTLSBundle(namespace, config)
 		if err != nil {
@@ -352,11 +354,20 @@ func SqlServerConfigMaps(name, namespace string, config StatefulSetConfig) []*v1
 		}
 		data["key.pem"] = bundle.Key
 		data["chain.pem"] = bundle.Chain
+
+		ret = append(ret, &v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name + "-roots", Namespace: namespace},
+			Data: map[string]string{
+				"roots.pem": bundle.Root,
+			},
+		})
 	}
 
 	serverConfig := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Data:       data,
 	}
-	return []*v1.ConfigMap{serverConfig}
+	ret = append(ret, serverConfig)
+
+	return ret
 }

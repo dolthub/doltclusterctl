@@ -41,10 +41,10 @@ type TLSBundle struct {
 // single leaf certificate. All RSA-4096 keys. The leaf certificate is created
 // with the following SANs:
 //
-// * dolt-{0,1,...}.dolt-internal.dolt.svc.cluster.local
-// * dolt-ro.dolt.svc.cluster.local
-// * dolt-rw.dolt.svc.cluster.local
-// * dolt.dolt.svc.cluster.local
+// * dolt-{0,1,...}.dolt-internal.[NAMESPACE]
+// * dolt-ro.[NAMESPACE]
+// * dolt-rw.[NAMESPACE]
+// * dolt.[NAMESPACE]
 func NewTLSBundle(namespace string, config StatefulSetConfig) (TLSBundle, error) {
 	rootkey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
@@ -69,10 +69,11 @@ func NewTLSBundle(namespace string, config StatefulSetConfig) (TLSBundle, error)
 		return TLSBundle{}, err
 	}
 	rootTemplate := &x509.Certificate{
-		IsCA:      true,
-		NotBefore: time.Now().Add(-1 * time.Hour),
-		NotAfter:  time.Now().Add(10 * time.Hour),
-		KeyUsage:  x509.KeyUsageCertSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(10 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
 		Subject: pkix.Name{
 			CommonName: "e2e Test Root",
 		},
@@ -96,10 +97,11 @@ func NewTLSBundle(namespace string, config StatefulSetConfig) (TLSBundle, error)
 		return TLSBundle{}, err
 	}
 	intTemplate := &x509.Certificate{
-		IsCA:      true,
-		NotBefore: time.Now().Add(-1 * time.Hour),
-		NotAfter:  time.Now().Add(2 * time.Hour),
-		KeyUsage:  x509.KeyUsageCertSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(2 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
 		Subject: pkix.Name{
 			CommonName: "e2e Test Intermediate",
 		},
@@ -114,14 +116,13 @@ func NewTLSBundle(namespace string, config StatefulSetConfig) (TLSBundle, error)
 		return TLSBundle{}, err
 	}
 
-	namespaceDNS := fmt.Sprintf(".%s.svc.cluster.local", namespace)
 	leafDNSNames := []string{
-		"dolt-ro" + namespaceDNS,
-		"dolt-rw" + namespaceDNS,
-		"dolt" + namespaceDNS,
+		"dolt-ro." + namespace,
+		"dolt-rw." + namespace,
+		"dolt." + namespace,
 	}
 	for i := int32(0); i < config.NumReplicas; i++ {
-		leafDNSNames = append(leafDNSNames, fmt.Sprintf("dolt-%d%s", i, namespaceDNS))
+		leafDNSNames = append(leafDNSNames, fmt.Sprintf("dolt-%d.dolt-internal.", i)+namespace)
 	}
 
 	leafSerial, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
@@ -129,9 +130,10 @@ func NewTLSBundle(namespace string, config StatefulSetConfig) (TLSBundle, error)
 		return TLSBundle{}, err
 	}
 	leafTemplate := &x509.Certificate{
-		NotBefore: time.Now().Add(-1 * time.Hour),
-		NotAfter:  time.Now().Add(2 * time.Hour),
-		KeyUsage:  x509.KeyUsageKeyAgreement | x509.KeyUsageKeyEncipherment,
+		BasicConstraintsValid: true,
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(2 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyAgreement | x509.KeyUsageKeyEncipherment,
 		Subject: pkix.Name{
 			CommonName: "e2e Test Leaf",
 		},
