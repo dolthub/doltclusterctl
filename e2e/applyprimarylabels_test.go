@@ -72,7 +72,16 @@ func TestApplyPrimaryLabels(t *testing.T) {
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("-tls-ca", "/etc/doltcerts/roots.pem", "applyprimarylabels", "dolt"), WithTLSRoots())).
 		Feature()
-	testenv.Test(t, feature, password, tlsinsecureagainstplaintext, tlsinsecureagainsttlsloose, tlsca)
+	wrongtlsservername := features.New("WrongTLSServerName").
+		WithSetup("create statefulset", CreateStatefulSet(WithTLSMode(TLSModeRequired))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(
+			WithArgs("-tls-ca", "/etc/doltcerts/roots.pem", "-tls-server-name", "does.not.match", "applyprimarylabels", "dolt"),
+			WithTLSRoots(),
+			ShouldFailWith("tls: failed to verify certificate: x509: certificate is valid for "))).
+		Feature()
+
+	testenv.Test(t, feature, password, tlsinsecureagainstplaintext, tlsinsecureagainsttlsloose, tlsca, wrongtlsservername)
 }
 
 type DCCJob struct {
