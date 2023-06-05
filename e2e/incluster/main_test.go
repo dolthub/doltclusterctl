@@ -71,11 +71,13 @@ func TestCreateSomeData(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		defer db.Close()
 		ctx := context.TODO()
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		_, err = conn.ExecContext(ctx, "CREATE DATABASE testdata")
 		if err != nil {
 			return err
@@ -107,7 +109,18 @@ func TestAssertCreatedDataPresent(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		row := db.QueryRowContext(context.TODO(), "SELECT COUNT(*) FROM vals")
+		defer db.Close()
+		ctx := context.TODO()
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		_, err = conn.ExecContext(ctx, "USE testdata")
+		if err != nil {
+			return err
+		}
+		row := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM vals")
 		if row.Err() != nil {
 			return row.Err()
 		}

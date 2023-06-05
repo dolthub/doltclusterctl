@@ -24,7 +24,7 @@ func TestRollingRestart(t *testing.T) {
 	newcluster := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunRollingRestart", RunDoltClusterCtlJob("rollingrestart", "dolt")).
+		Assess("RunRollingRestart", RunDoltClusterCtlJob(WithArgs("rollingrestart", "dolt"))).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-2/IsStandby", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "standby")).

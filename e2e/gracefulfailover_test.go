@@ -24,7 +24,7 @@ func TestGracefulFailover(t *testing.T) {
 	newcluster := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
@@ -33,12 +33,12 @@ func TestGracefulFailover(t *testing.T) {
 	cycles := features.New("Cycles").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
 		Assess("dolt-1/IsPrimary", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
@@ -47,8 +47,8 @@ func TestGracefulFailover(t *testing.T) {
 	counts := features.New("CountsUp").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
 		Assess("dolt-2/IsPrimary", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
@@ -58,9 +58,9 @@ func TestGracefulFailover(t *testing.T) {
 	preservesdata := features.New("PreservesData").
 		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 		Assess("CreateData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeData", DBName: "dolt-rw"})).
-		Assess("RunGracefulFailover", RunDoltClusterCtlJob("gracefulfailover", "dolt")).
+		Assess("RunGracefulFailover", RunDoltClusterCtlJob(WithArgs("gracefulfailover", "dolt"))).
 		Assess("AssertData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertCreatedDataPresent", DBName: "dolt-rw"})).
 		Feature()
 	testenv.Test(t, newcluster, cycles, counts, preservesdata)

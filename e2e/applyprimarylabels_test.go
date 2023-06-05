@@ -15,15 +15,23 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
+	apimachinerywait "k8s.io/apimachinery/pkg/util/wait"
 	batchv1 "k8s.io/api/batch/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/api/core/v1"
+
+	"sigs.k8s.io/e2e-framework/klient/k8s"
+	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
-	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
@@ -32,7 +40,7 @@ func TestApplyPrimaryLabels(t *testing.T) {
 	feature := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
@@ -41,16 +49,46 @@ func TestApplyPrimaryLabels(t *testing.T) {
 	password := features.New("WithPassword").
 		WithSetup("create statefulset", CreateStatefulSet(WithCredentials(envconf.RandomName("user", 12), envconf.RandomName("pass", 12)))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
-		Assess("RunPrimaryLabels", RunDoltClusterCtlJob("applyprimarylabels", "dolt")).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
 		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
-	testenv.Test(t, feature, password)
+	tlsinsecureagainstplaintext := features.New("TLSInsecureAgainstPlaintextServer").
+		WithSetup("create statefulset", CreateStatefulSet()).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(
+			WithArgs("-tls-insecure", "applyprimarylabels", "dolt"),
+			ShouldFailWith("TLS requested but server does not support TLS"))).
+		Feature()
+	testenv.Test(t, feature, password, tlsinsecureagainstplaintext)
 }
 
-func RunDoltClusterCtlJob(args ...string) features.Func {
+type DCCJob struct {
+	Args      []string
+	FailMatch string
+}
+
+type DCCJobOption func(*DCCJob)
+
+func WithArgs(args ...string) DCCJobOption {
+	return func(job *DCCJob) {
+		job.Args = args
+	}
+}
+
+func ShouldFailWith(match string) DCCJobOption {
+	return func(job *DCCJob) {
+		job.FailMatch = match
+	}
+}
+
+func RunDoltClusterCtlJob(opts ...DCCJobOption) features.Func {
+	var dccjob DCCJob
+	for _, o := range opts {
+		o(&dccjob)
+	}
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		name := envconf.RandomName("doltclusterctl", 24)
 
@@ -58,7 +96,7 @@ func RunDoltClusterCtlJob(args ...string) features.Func {
 		config := state.Config
 
 		// Create the job.
-		job := NewDoltClusterCtlJob(name, c.Namespace(), config, args...)
+		job := NewDoltClusterCtlJob(name, c.Namespace(), config, dccjob.Args...)
 
 		client, err := c.NewClient()
 		if err != nil {
@@ -78,12 +116,75 @@ func RunDoltClusterCtlJob(args ...string) features.Func {
 		}()
 
 		// Wait for it to complete.
-		err = wait.For(conditions.New(client.Resources()).JobCompleted(job), wait.WithTimeout(time.Minute*1))
+		var success bool
+		err = wait.For(JobCompletedOrFailed(client.Resources(), job, &success), wait.WithTimeout(time.Minute*1))
 		if err != nil {
 			t.Fatal(err)
 		}
 
+		if success && dccjob.FailMatch != "" {
+			t.Fatalf("expected job to fail with '%s' but the job succeeded", dccjob.FailMatch)
+		}
+
+		if !success && dccjob.FailMatch == "" {
+			t.Fatalf("expected job to succeed but if failed")
+		}
+
+		if !success && dccjob.FailMatch != "" {
+			// TODO: We need to assert on the fail match in the logs for the pod for the job.
+			podselector := job.Spec.Selector
+			var pods v1.PodList
+			err = client.Resources(c.Namespace()).List(context.TODO(), &pods, resources.WithLabelSelector(labels.Set(podselector.MatchLabels).String()))
+			if err != nil {
+				t.Fatalf("unable to list pods for failed job: %v", err)
+			}
+			if len(pods.Items) != 1 {
+				t.Fatalf("listing pods for failed job expected to find 1 pod, found: %d", len(pods.Items))
+			}
+			pod := pods.Items[0]
+
+			clientset, err := kubernetes.NewForConfig(client.RESTConfig())
+			if err != nil {
+				t.Fatalf("could not create client for retrieving pod logs: %v", err)
+			}
+			var podLogOpts v1.PodLogOptions
+			req := clientset.CoreV1().Pods(pod.GetNamespace()).GetLogs(pod.GetName(), &podLogOpts)
+			stream, err := req.Stream(context.TODO())
+			if err != nil {
+				t.Fatalf("error retreiving pod logs: %v", err)
+			}
+			defer stream.Close()
+			var contents bytes.Buffer
+			_, err = io.Copy(&contents, stream)
+			if err != nil {
+				t.Fatalf("error retreiving pod logs: %v", err)
+			}
+			contentsStr := contents.String()
+			if !strings.Contains(contentsStr, dccjob.FailMatch) {
+				t.Fatalf("failed to find expected match '%s' in pod logs:\n%s", dccjob.FailMatch, contentsStr)
+			}
+		}
+
 		return ctx
+	}
+}
+
+func JobCompletedOrFailed(resources *resources.Resources, job k8s.Object, success *bool) apimachinerywait.ConditionFunc {
+	return func() (done bool, err error) {
+		if err := resources.Get(context.TODO(), job.GetName(), job.GetNamespace(), job); err != nil {
+			return false, err
+		}
+		status := job.(*batchv1.Job).Status
+		for _, cond := range status.Conditions {
+			if cond.Type == batchv1.JobFailed && cond.Status == v1.ConditionTrue {
+				done = true
+				*success = false
+			} else if cond.Type == batchv1.JobComplete && cond.Status == v1.ConditionTrue {
+				done = true
+				*success = true
+			}
+		}
+		return
 	}
 }
 
@@ -93,19 +194,21 @@ func NewDoltClusterCtlJob(name, namespace string, config StatefulSetConfig, args
 	var env []v1.EnvVar
 	if config.Username != "" {
 		env = append(env, v1.EnvVar{
-			Name: "DOLT_USERNAME",
+			Name:  "DOLT_USERNAME",
 			Value: config.Username,
 		})
 	}
 	if config.Password != "" {
 		env = append(env, v1.EnvVar{
-			Name: "DOLT_PASSWORD",
+			Name:  "DOLT_PASSWORD",
 			Value: config.Password,
 		})
 	}
+	var backoff int32 = 0
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: batchv1.JobSpec{
+			BackoffLimit: &backoff,
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: v1.PodSpec{
