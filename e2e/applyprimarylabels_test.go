@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
-	apimachinerywait "k8s.io/apimachinery/pkg/util/wait"
 	batchv1 "k8s.io/api/batch/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	apimachinerywait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
@@ -62,7 +62,12 @@ func TestApplyPrimaryLabels(t *testing.T) {
 			WithArgs("-tls-insecure", "applyprimarylabels", "dolt"),
 			ShouldFailWith("TLS requested but server does not support TLS"))).
 		Feature()
-	testenv.Test(t, feature, password, tlsinsecureagainstplaintext)
+	tlsinsecureagainsttlsloose := features.New("TLSInsecureAgainstTLSRequired").
+		WithSetup("create statefulset", CreateStatefulSet(WithTLSMode(TLSModeOptional))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("-tls-insecure", "applyprimarylabels", "dolt"))).
+		Feature()
+	testenv.Test(t, feature, password, tlsinsecureagainstplaintext, tlsinsecureagainsttlsloose)
 }
 
 type DCCJob struct {

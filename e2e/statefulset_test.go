@@ -29,10 +29,19 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
+type TLSMode int
+
+const (
+	TLSModeNone     TLSMode = 0
+	TLSModeOptional         = 1
+	TLSModeRequired         = 2
+)
+
 type StatefulSetConfig struct {
 	NumReplicas int32
 	Username    string
 	Password    string
+	TLSMode     TLSMode
 }
 
 // Context state which represents the configuration and created resources for
@@ -105,6 +114,12 @@ func WithCredentials(username, password string) StatefulSetOption {
 	}
 }
 
+func WithTLSMode(mode TLSMode) StatefulSetOption {
+	return func(config *StatefulSetConfig) {
+		config.TLSMode = mode
+	}
+}
+
 func CreateStatefulSet(opts ...StatefulSetOption) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		var config StatefulSetConfig
@@ -155,87 +170,88 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 		config.NumReplicas = 2
 	}
 	return &appsv1.StatefulSet{
-			ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
-			Spec: appsv1.StatefulSetSpec{
-				Selector: &metav1.LabelSelector{
-					MatchLabels: labels,
-				},
-				Replicas:            &config.NumReplicas,
-				ServiceName:         "dolt-internal",
-				PodManagementPolicy: appsv1.ParallelPodManagement,
-				Template: v1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{Labels: labels},
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{{
-							Name:            "dolt",
-							Image:           DoltImage,
-							ImagePullPolicy: v1.PullNever,
-							Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
-							Ports: []v1.ContainerPort{{
-								Name:          "dolt",
-								ContainerPort: 3306,
-							}},
-							WorkingDir: "/var/doltdb",
-							Env: []v1.EnvVar{{
-								Name:  "DOLT_ROOT_PATH",
-								Value: "/var/doltdb",
-							}},
-							VolumeMounts: []v1.VolumeMount{{
-								Name:      "dolt-storage",
-								MountPath: "/var/doltdb",
-							}},
+		ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Replicas:            &config.NumReplicas,
+			ServiceName:         "dolt-internal",
+			PodManagementPolicy: appsv1.ParallelPodManagement,
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{{
+						Name:            "dolt",
+						Image:           DoltImage,
+						ImagePullPolicy: v1.PullNever,
+						Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
+						Ports: []v1.ContainerPort{{
+							Name:          "dolt",
+							ContainerPort: 3306,
 						}},
-						InitContainers: []v1.Container{{
-							Name:            "init-dolt",
-							Image:           DoltImage,
-							ImagePullPolicy: v1.PullNever,
-							Command: []string{"/bin/bash", "-c", `
+						WorkingDir: "/var/doltdb",
+						Env: []v1.EnvVar{{
+							Name:  "DOLT_ROOT_PATH",
+							Value: "/var/doltdb",
+						}},
+						VolumeMounts: []v1.VolumeMount{{
+							Name:      "dolt-storage",
+							MountPath: "/var/doltdb",
+						}, {
+							Name:      "dolt-config",
+							MountPath: "/etc/dolt",
+						}},
+					}},
+					InitContainers: []v1.Container{{
+						Name:            "init-dolt",
+						Image:           DoltImage,
+						ImagePullPolicy: v1.PullNever,
+						Command: []string{"/bin/bash", "-c", `
 dolt config --global --set metrics.disabled true
 dolt config --global --set user.email testing-doltclusterctl@example.com
 dolt config --global --set user.name "Testing doltcluster"
 cp /etc/dolt/"${POD_NAME}".yaml /var/doltdb/config.yaml
 `},
-							WorkingDir: "/var/doltdb",
-							Env: []v1.EnvVar{{
-								Name:  "DOLT_ROOT_PATH",
-								Value: "/var/doltdb",
-							}, {
-								Name: "POD_NAME",
-								ValueFrom: &v1.EnvVarSource{
-									FieldRef: &v1.ObjectFieldSelector{
-										FieldPath: "metadata.name",
-									},
-								},
-							}},
-							VolumeMounts: []v1.VolumeMount{{
-								Name:      "dolt-storage",
-								MountPath: "/var/doltdb",
-							}, {
-								Name:      "dolt-config",
-								MountPath: "/etc/dolt",
-							}},
-						}},
-						Volumes: []v1.Volume{{
-							Name: "dolt-storage",
-							VolumeSource: v1.VolumeSource{
-								EmptyDir: &v1.EmptyDirVolumeSource{},
-							},
+						WorkingDir: "/var/doltdb",
+						Env: []v1.EnvVar{{
+							Name:  "DOLT_ROOT_PATH",
+							Value: "/var/doltdb",
 						}, {
-							Name: "dolt-config",
-							VolumeSource: v1.VolumeSource{
-								ConfigMap: &v1.ConfigMapVolumeSource{
-									LocalObjectReference: v1.LocalObjectReference{
-										Name: "dolt",
-									},
+							Name: "POD_NAME",
+							ValueFrom: &v1.EnvVarSource{
+								FieldRef: &v1.ObjectFieldSelector{
+									FieldPath: "metadata.name",
 								},
 							},
 						}},
-					},
+						VolumeMounts: []v1.VolumeMount{{
+							Name:      "dolt-storage",
+							MountPath: "/var/doltdb",
+						}, {
+							Name:      "dolt-config",
+							MountPath: "/etc/dolt",
+						}},
+					}},
+					Volumes: []v1.Volume{{
+						Name: "dolt-storage",
+						VolumeSource: v1.VolumeSource{
+							EmptyDir: &v1.EmptyDirVolumeSource{},
+						},
+					}, {
+						Name: "dolt-config",
+						VolumeSource: v1.VolumeSource{
+							ConfigMap: &v1.ConfigMapVolumeSource{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: "dolt",
+								},
+							},
+						},
+					}},
 				},
 			},
-		}, []*v1.ConfigMap{
-			SqlServerConfigMap("dolt", namespace, config),
-		}
+		},
+	}, SqlServerConfigMaps("dolt", namespace, config)
 }
 
 func TestSqlServerConfig(t *testing.T) {
@@ -267,6 +283,30 @@ func StandbyRemoteStanza(num int32) string {
 `, num, num)
 }
 
+func ListenerStanza(config StatefulSetConfig) string {
+	if config.TLSMode == TLSModeRequired {
+		return `listener:
+  host: 0.0.0.0
+  port: 3306
+  max_connections: 128
+  tls_key: "/etc/dolt/key.pem"
+  tls_cert: "/etc/dolt/chain.pem"
+  required_secure_transport: true`
+	} else if config.TLSMode == TLSModeOptional {
+		return `listener:
+  host: 0.0.0.0
+  port: 3306
+  max_connections: 128
+  tls_key: "/etc/dolt/key.pem"
+  tls_cert: "/etc/dolt/chain.pem"`
+	} else {
+		return `listener:
+  host: 0.0.0.0
+  port: 3306
+  max_connections: 128`
+	}
+}
+
 func SqlServerConfig(this int32, config StatefulSetConfig) string {
 	var parts []string
 	parts = append(parts, `log_level: trace
@@ -286,11 +326,8 @@ cluster:
   bootstrap_role: %s
   remotesapi:
     port: 50051
-listener:
-  host: 0.0.0.0
-  port: 3306
-  max_connections: 128
-`, role))
+%s
+`, role, ListenerStanza(config)))
 	if config.Username != "" {
 		parts = append(parts, fmt.Sprintf(`user:
   name: %s
@@ -302,13 +339,24 @@ listener:
 	return strings.Join(parts, "")
 }
 
-func SqlServerConfigMap(name, namespace string, config StatefulSetConfig) *v1.ConfigMap {
+func SqlServerConfigMaps(name, namespace string, config StatefulSetConfig) []*v1.ConfigMap {
 	data := make(map[string]string)
 	for i := int32(0); i < config.NumReplicas; i++ {
 		data[fmt.Sprintf("dolt-%d.yaml", i)] = SqlServerConfig(i, config)
 	}
-	return &v1.ConfigMap{
+
+	if config.TLSMode != TLSModeNone {
+		bundle, err := NewTLSBundle(namespace, config)
+		if err != nil {
+			panic(err)
+		}
+		data["key.pem"] = bundle.Key
+		data["chain.pem"] = bundle.Chain
+	}
+
+	serverConfig := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Data:       data,
 	}
+	return []*v1.ConfigMap{serverConfig}
 }

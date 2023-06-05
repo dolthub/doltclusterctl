@@ -17,6 +17,7 @@ go_test(
         "services_test.go",
         "statefulset_test.go",
         "testpod_test.go",
+        "tls_test.go",
     ],
     tags = ["manual"],
     deps = [
