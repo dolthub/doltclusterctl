@@ -19,10 +19,10 @@ http_archive(
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
+    sha256 = "29d5dafc2a5582995488c6735115d1d366fcd6a0fc2e2a153f02988706349825",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
     ],
 )
 
@@ -128,9 +128,9 @@ http_archive(
     build_file_content = """
 exports_files(["bin/dolt"])
 """,
-    sha256 = "218b92ca12b5785d37796311c16315aa37bf960064bb8ffa3315864273e59fa7",
+    sha256 = "468de06801d74f5dd5ad7d47da64af3f054aa86efab4aac326482b0fd11d505c",
     strip_prefix = "dolt-linux-amd64",
     urls = [
-        "https://github.com/dolthub/dolt/releases/download/v1.2.1/dolt-linux-amd64.tar.gz",
+        "https://github.com/dolthub/dolt/releases/download/v1.2.4/dolt-linux-amd64.tar.gz",
     ],
 )
