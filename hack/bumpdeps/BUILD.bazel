@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "bumpdeps_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/dolthub/doltclusterctl/hack/bumpdeps",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "bumpdeps",
+    embed = [":bumpdeps_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -2,6 +2,7 @@ workspace(
     name = "com_github_dolthub_doltclusterctl",
 )
 
+load("@com_github_dolthub_doltclusterctl//:versions.bzl", "DEPS")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 ####################
@@ -10,20 +11,14 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-    ],
+    sha256 = DEPS.io_bazel_rules_go.sha256,
+    urls = DEPS.io_bazel_rules_go.urls,
 )
 
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "29d5dafc2a5582995488c6735115d1d366fcd6a0fc2e2a153f02988706349825",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
-    ],
+    sha256 = DEPS.bazel_gazelle.sha256,
+    urls = DEPS.bazel_gazelle.urls,
 )
 
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
@@ -48,11 +43,8 @@ gazelle_dependencies()
 
 http_archive(
     name = "rules_pkg",
-    sha256 = "8f9ee2dc10c1ae514ee599a8b42ed99fa262b757058f65ad3c384289ff70c4b8",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-        "https://github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-    ],
+    sha256 = DEPS.rules_pkg.sha256,
+    urls = DEPS.rules_pkg.urls,
 )
 
 load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
@@ -65,9 +57,9 @@ rules_pkg_dependencies()
 
 http_archive(
     name = "rules_oci",
-    sha256 = "db57efd706f01eb3ce771468366baa1614b5b25f4cce99757e2b8d942155b8ec",
-    strip_prefix = "rules_oci-1.0.0",
-    url = "https://github.com/bazel-contrib/rules_oci/releases/download/v1.0.0/rules_oci-v1.0.0.tar.gz",
+    sha256 = DEPS.rules_oci.sha256,
+    strip_prefix = DEPS.rules_oci.strip_prefix,
+    urls = DEPS.rules_oci.urls,
 )
 
 load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
@@ -89,7 +81,7 @@ load(
 oci_pull(
     name = "ubuntu2004",
     # Find at https://l.gcr.io/google/ubuntu2004
-    digest = "sha256:27a5b5335a18890fd424e71878a86124d930284ac962dc167ff7f8676e78a573",
+    digest = "sha256:666805a878d9cd58ce9dfd6f423e2d0e3bdf01eea0cddd2be3a88244c1d4dfa5",
     image = "l.gcr.io/google/ubuntu2004",
 )
 
@@ -99,11 +91,9 @@ oci_pull(
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "ddf8c9c1ffccb7e80afd183b3bd32b3b62f7cc54b106be190bf49f2bc09daab5",
-    strip_prefix = "protobuf-23.2",
-    urls = [
-        "https://github.com/protocolbuffers/protobuf/releases/download/v23.2/protobuf-23.2.tar.gz",
-    ],
+    sha256 = DEPS.com_google_protobuf.sha256,
+    strip_prefix = DEPS.com_google_protobuf.strip_prefix,
+    urls = DEPS.com_google_protobuf.urls,
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
@@ -112,11 +102,9 @@ protobuf_deps()
 
 http_archive(
     name = "com_github_bazelbuild_buildtools",
-    sha256 = "977a0bd4593c8d4c8f45e056d181c35e48aa01ad4f8090bdb84f78dca42f47dc",
-    strip_prefix = "buildtools-6.1.2",
-    urls = [
-        "https://github.com/bazelbuild/buildtools/archive/refs/tags/v6.1.2.tar.gz",
-    ],
+    sha256 = DEPS.com_github_bazelbuild_buildtools.sha256,
+    strip_prefix = DEPS.com_github_bazelbuild_buildtools.strip_prefix,
+    urls = DEPS.com_github_bazelbuild_buildtools.urls,
 )
 
 #############################
@@ -128,9 +116,7 @@ http_archive(
     build_file_content = """
 exports_files(["bin/dolt"])
 """,
-    sha256 = "468de06801d74f5dd5ad7d47da64af3f054aa86efab4aac326482b0fd11d505c",
+    sha256 = DEPS.dolt_release_linux_amd64.sha256,
     strip_prefix = "dolt-linux-amd64",
-    urls = [
-        "https://github.com/dolthub/dolt/releases/download/v1.2.4/dolt-linux-amd64.tar.gz",
-    ],
+    urls = DEPS.dolt_release_linux_amd64.urls,
 )
