@@ -98,24 +98,25 @@ func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {
 
 	db, err := OpenDB(ctx, cfg, instance)
 	if err != nil {
-		return DBState{"", 0, instance, nil, errf(err)}
+		return DBState{Err: errf(err)}
 	}
 	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return DBState{"", 0, instance, nil, errf(err)}
+		return DBState{Err: errf(err)}
 	}
 	defer conn.Close()
 
 	role, epoch, err := loadRoleAndEpoch(ctx, conn)
 	if err != nil {
-		return DBState{"", 0, instance, nil, errf(err)}
+		return DBState{Err: errf(err)}
 	}
 
-	state := DBState{role, epoch, instance, nil, nil}
+	state := DBState{role, epoch, instance, nil, nil, nil}
 
 	loadStatusRows(ctx, conn, &state)
+	loadDBRemotes(ctx, conn, &state)
 
 	return state
 }
@@ -140,6 +141,52 @@ func loadStatusRows(ctx context.Context, conn *sql.Conn, state *DBState) {
 		state.Err = fmt.Errorf("error loading dolt_cluster_status table: %w", err)
 		return
 	}
+}
+
+func loadDBRemotes(ctx context.Context, conn *sql.Conn, state *DBState) {
+	if state.Err != nil {
+		return
+	}
+
+	type key struct {
+		db string
+		remote string
+	}
+	keys := make(map[key]struct{})
+	for _, v := range state.Status {
+		keys[key{v.Database, v.Remote}] = struct{}{}
+	}
+
+	for k := range keys {
+		remote, err := loadDBRemote(ctx, conn, k.db, k.remote)
+		if err != nil {
+			state.Err = fmt.Errorf("error loading remote url for database: %v, remote %v: %w", k.db, k.remote, err)
+			return
+		}
+		state.Remotes = append(state.Remotes, remote)
+	}
+}
+
+func loadDBRemote(ctx context.Context, conn *sql.Conn, db, remote string) (DBRemote, error) {
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT url FROM `%s`.dolt_remotes WHERE name = ?", db), remote)
+	if err != nil {
+		return DBRemote{}, err
+	}
+	if !rows.Next() {
+		return DBRemote{}, errors.New("error loading db remote: did not find a remote matching the name in the database")
+	}
+	var url string
+	err = rows.Scan(&url)
+	if err != nil {
+		return DBRemote{}, fmt.Errorf("error loading db remote: could not scan url: %w", err)
+	}
+	if rows.Next() {
+		return DBRemote{}, errors.New("error loading db remote: found more than one a remote matching the name in the database")
+	}
+	if rows.Err() != nil {
+		return DBRemote{}, rows.Err()
+	}
+	return DBRemote{db, remote, url}, nil
 }
 
 func loadRoleAndEpoch(ctx context.Context, conn *sql.Conn) (string, int, error) {
@@ -175,11 +222,18 @@ type StatusRow struct {
 	CurrentError   sql.NullString
 }
 
+type DBRemote struct {
+	Database string
+	Name     string
+	URL      string
+}
+
 type DBState struct {
 	Role     string
 	Epoch    int
 	Instance Instance
 	Status   []StatusRow
+	Remotes  []DBRemote
 	Err      error
 }
 
