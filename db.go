@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 )
 
@@ -39,16 +40,18 @@ func RenderDSN(cfg *Config, hostname string, port int) string {
 	if pass != "" {
 		authority += ":" + pass
 	}
-	params := ""
+
+	params := make(url.Values)
+	params["parseTime"] = []string{"true"}
 	if cfg.TLSInsecure {
-		params += "?tls=skip-verify"
+		params["tls"] = []string{"skip-verify"}
 	} else if cfg.TLSConfig != nil {
 		// TODO: This is spookily coupled to the config name in main
-		params += "?tls=custom"
+		params["tls"] = []string{"custom"}
 	} else if cfg.TLSVerified {
-		params += "?tls=true"
+		params["tls"] = []string{"true"}
 	}
-	return fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster%s", authority, hostname, port, params)
+	return fmt.Sprintf("%s@tcp(%s:%d)/dolt_cluster?%s", authority, hostname, port, params.Encode())
 }
 
 func CallAssumeRole(ctx context.Context, cfg *Config, instance Instance, role string, epoch int) error {
@@ -88,47 +91,95 @@ func CallAssumeRole(ctx context.Context, cfg *Config, instance Instance, role st
 	return nil
 }
 
-func LoadRoleAndEpoch(ctx context.Context, cfg *Config, instance Instance) DBState {
-	var role string
-	var epoch int
-
+func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {
 	errf := func(err error) error {
 		return fmt.Errorf("error loading role and epoch for %s: %w", instance.Name(), err)
 	}
 
 	db, err := OpenDB(ctx, cfg, instance)
 	if err != nil {
-		return DBState{"", 0, instance, errf(err)}
+		return DBState{"", 0, instance, nil, errf(err)}
 	}
 	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return DBState{"", 0, instance, errf(err)}
+		return DBState{"", 0, instance, nil, errf(err)}
 	}
 	defer conn.Close()
+
+	role, epoch, err := loadRoleAndEpoch(ctx, conn)
+	if err != nil {
+		return DBState{"", 0, instance, nil, errf(err)}
+	}
+
+	state := DBState{role, epoch, instance, nil, nil}
+
+	loadStatusRows(ctx, conn, &state)
+
+	return state
+}
+
+func loadStatusRows(ctx context.Context, conn *sql.Conn, state *DBState) {
+	rows, err := conn.QueryContext(ctx, "SELECT `database`, role, epoch, standby_remote, replication_lag_millis, last_update, current_error FROM `dolt_cluster`.`dolt_cluster_status`")
+	if err != nil {
+		state.Err = fmt.Errorf("error loading dolt_cluster_status table: %w", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status StatusRow
+		err = rows.Scan(&status.Database, &status.Role, &status.Epoch, &status.Remote, &status.ReplicationLag, &status.LastUpdate, &status.CurrentError)
+		if err != nil {
+			state.Err = fmt.Errorf("error scanning status row: %w", err)
+			return
+		}
+		state.Status = append(state.Status, status)
+	}
+	if rows.Err() != nil {
+		state.Err = fmt.Errorf("error loading dolt_cluster_status table: %w", err)
+		return
+	}
+}
+
+func loadRoleAndEpoch(ctx context.Context, conn *sql.Conn) (string, int, error) {
+	var role string
+	var epoch int
+
 	rows, err := conn.QueryContext(ctx, "SELECT @@global.dolt_cluster_role, @@global.dolt_cluster_role_epoch")
 	if err != nil {
-		return DBState{"", 0, instance, errf(err)}
 	}
 	defer rows.Close()
 	if rows.Next() {
 		err = rows.Scan(&role, &epoch)
 		if err != nil {
-			return DBState{"", 0, instance, errf(err)}
+			return "", 0, err
 		}
+	} else if rows.Err() == nil {
+		return "", 0, errors.New("querying cluster_role and epoch should have return values, but did not")
 	}
 	if rows.Err() != nil {
-		return DBState{"", 0, instance, errf(rows.Err())}
+		return "", 0, rows.Err()
 	}
 
-	return DBState{role, epoch, instance, nil}
+	return role, epoch, nil
+}
+
+type StatusRow struct {
+	Database       string
+	Role           string
+	Epoch          int
+	Remote         string
+	ReplicationLag sql.NullInt64
+	LastUpdate     sql.NullTime
+	CurrentError   sql.NullString
 }
 
 type DBState struct {
 	Role     string
 	Epoch    int
 	Instance Instance
+	Status   []StatusRow
 	Err      error
 }
 
@@ -136,7 +187,7 @@ func LoadDBStates(ctx context.Context, cfg *Config, cluster Cluster) []DBState {
 	ret := make([]DBState, cluster.NumReplicas())
 	for i := 0; i < cluster.NumReplicas(); i++ {
 		instance := cluster.Instance(i)
-		ret[i] = LoadRoleAndEpoch(ctx, cfg, instance)
+		ret[i] = LoadDBState(ctx, cfg, instance)
 	}
 	return ret
 }
