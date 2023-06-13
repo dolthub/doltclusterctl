@@ -716,6 +716,14 @@ def go_dependencies():
         version = "v1.10.0",
     )
     go_repository(
+        name = "com_github_shopify_toxiproxy",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/shopify/toxiproxy",
+        sum = "h1:m0/O5ZSAoRoW/VXjA2hrg/R3K8ejn0l06yLRJaeD1GM=",
+        version = "v2.1.4+incompatible",
+    )
+
+    go_repository(
         name = "com_github_sirupsen_logrus",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/sirupsen/logrus",

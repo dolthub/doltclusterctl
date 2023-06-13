@@ -21,7 +21,7 @@ import (
 )
 
 func TestPromoteStandby(t *testing.T) {
-	feature := features.New("NewCluster").
+	newcluster := features.New("NewCluster").
 		WithSetup("create statefulset", CreateStatefulSet()).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPromoteStandby", RunDoltClusterCtlJob(WithArgs("promotestandby", "dolt"))).
@@ -30,5 +30,26 @@ func TestPromoteStandby(t *testing.T) {
 		Assess("Connect/dolt-rw", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-rw"})).
 		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
-	testenv.Test(t, feature)
+
+	// This test spins up a three node cluster, creates a database on the
+	// primary, and replicates it to the standbys. It then breaks the
+	// remotesapi port on the dolt-1 replica. It runs some more writes,
+	// which will not replicate to dolt-1 successfully, and then it runs
+	// `promotestandby`, asserting that dolt-2 is the replica which gets
+	// promoted.
+	mostrecent := features.New("MostRecent").
+		WithSetup("create statefulset", CreateStatefulSet(WithReplicas(3))).
+		WithTeardown("delete statefulset", DeleteStatefulSet).
+		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
+		Assess("InsertReplicatedData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateWriteACKdDatabaseWithData", DBName: "dolt-rw"})).
+		Assess("dolt-1/DisableRemotesAPI", RunUnitTestInCluster(InClusterTest{TestName: "TestDisableRemotesAPI", ToxiProxyEndpoint: "dolt-1.dolt-internal:8474"})).
+		Assess("InsertMoreData", RunUnitTestInCluster(InClusterTest{TestName: "TestInsertMoreACKdData", DBName: "dolt-rw"})).
+		Assess("RunPromoteStandby", RunDoltClusterCtlJob(WithArgs("promotestandby", "dolt"))).
+		Assess("dolt-2/IsPrimary", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "primary")).
+		Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
+		Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
+		Assess("AllDataIsPresent", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertWriteACKdDataPresent", DBName: "dolt-rw"})).
+		Feature()
+
+	testenv.Test(t, newcluster, mostrecent)
 }

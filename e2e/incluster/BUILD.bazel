@@ -10,6 +10,7 @@ go_test(
     deps = [
         "@com_github_cenkalti_backoff_v4//:backoff",
         "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_shopify_toxiproxy//client",
     ],
 )
 

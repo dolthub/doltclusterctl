@@ -93,8 +93,9 @@ func NewTestPod(namespace string) *v1.Pod {
 }
 
 type InClusterTest struct {
-	TestName string
-	DBName   string
+	TestName          string
+	DBName            string
+	ToxiProxyEndpoint string
 }
 
 func RunUnitTestInCluster(test InClusterTest) features.Func {
@@ -112,6 +113,9 @@ func RunUnitTestInCluster(test InClusterTest) features.Func {
 		command := []string{"/app/incluster_test", "-test.v", "-test.run", test.TestName}
 		if test.DBName != "" {
 			command = append(command, "-dbhostname", test.DBName)
+		}
+		if test.ToxiProxyEndpoint != "" {
+			command = append(command, "-toxiproxy-endpoint", test.ToxiProxyEndpoint)
 		}
 		if ss, ok := GetStatefulSet(ctx); ok {
 			config := ss.Config

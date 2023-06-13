@@ -6,6 +6,7 @@ require (
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20230519004202-7f2db5bd753e
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/go-sql-driver/mysql v1.7.1
+	github.com/shopify/toxiproxy v2.1.4+incompatible
 	github.com/stretchr/testify v1.8.2
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
