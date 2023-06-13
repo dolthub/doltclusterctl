@@ -120,3 +120,16 @@ exports_files(["bin/dolt"])
     strip_prefix = "dolt-linux-amd64",
     urls = DEPS.dolt_release_linux_amd64.urls,
 )
+
+##################################
+# toxiproxy release for e2e tests
+##################################
+
+http_archive(
+    name = "toxiproxy_release_linux_amd64",
+    build_file_content = """
+exports_files(["toxiproxy-server"])
+""",
+    sha256 = DEPS.toxiproxy_release_linux_amd64.sha256,
+    urls = DEPS.toxiproxy_release_linux_amd64.urls,
+)

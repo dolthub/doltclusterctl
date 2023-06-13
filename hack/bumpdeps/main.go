@@ -74,6 +74,12 @@ var Deps = []ArchiveDependency{{
 	DownloadURLTemplates: []string{
 		"https://github.com/dolthub/dolt/releases/download/{{.Version}}/dolt-linux-amd64.tar.gz",
 	},
+}, {
+	Name:             "toxiproxy_release_linux_amd64",
+	LatestReleaseURL: "https://github.com/Shopify/toxiproxy/releases/latest",
+	DownloadURLTemplates: []string{
+		"https://github.com/Shopify/toxiproxy/releases/download/{{.Version}}/toxiproxy_{{.VersionWithoutV}}_linux_amd64.tar.gz",
+	},
 }}
 
 type ResolvedDependency struct {

@@ -1,10 +1,10 @@
 DEPS = struct(
     bazel_gazelle = struct(
-        sha256 = "29d5dafc2a5582995488c6735115d1d366fcd6a0fc2e2a153f02988706349825",
+        sha256 = "b8b6d75de6e4bf7c41b7737b183523085f56283f6db929b86c5e7e1f09cf59c9",
         strip_prefix = "",
         urls = [
-            "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
-            "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.0/bazel-gazelle-v0.31.0.tar.gz",
+            "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.1/bazel-gazelle-v0.31.1.tar.gz",
+            "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.1/bazel-gazelle-v0.31.1.tar.gz",
         ],
     ),
     com_github_bazelbuild_buildtools = struct(
@@ -22,10 +22,10 @@ DEPS = struct(
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "e161c80775d39f899761d85f4ae90de5c8e005b1b2d93b97b205b9a1fa7eb72d",
+        sha256 = "d1d25776c07dd558a29ceb27725ec94b4186b8bbdc0e95e10735d0cbfe5786fd",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.2.5/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.4.0/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
@@ -49,6 +49,13 @@ DEPS = struct(
         urls = [
             "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
             "https://github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
+        ],
+    ),
+    toxiproxy_release_linux_amd64 = struct(
+        sha256 = "2dcc53a7cd5e1cab3514bba3002cdc9626abd7e42cdf4a070242e3d977dcbeca",
+        strip_prefix = "",
+        urls = [
+            "https://github.com/Shopify/toxiproxy/releases/download/v2.5.0/toxiproxy_2.5.0_linux_amd64.tar.gz",
         ],
     ),
 )
