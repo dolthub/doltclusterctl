@@ -149,7 +149,7 @@ func loadDBRemotes(ctx context.Context, conn *sql.Conn, state *DBState) {
 	}
 
 	type key struct {
-		db string
+		db     string
 		remote string
 	}
 	keys := make(map[key]struct{})

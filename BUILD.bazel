@@ -106,6 +106,7 @@ go_test(
     name = "doltclusterctl_test",
     size = "small",
     srcs = [
+        "commands_test.go",
         "config_test.go",
         "main_test.go",
     ],

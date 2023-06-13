@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 )
 
 type Command interface {
@@ -134,19 +135,42 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 	return nil
 }
 
+func PickNextPrimary(dbstates []DBState) int {
+	firststandby := -1
+	nextprimary := -1
+	var updated time.Time
+	for i, state := range dbstates {
+		if state.Role == "standby" {
+			if firststandby == -1 {
+				firststandby = i
+			}
+
+			var oldestDB time.Time
+			for _, status := range state.Status {
+				if status.LastUpdate.Valid && (oldestDB == (time.Time{}) || oldestDB.After(status.LastUpdate.Time)) {
+					oldestDB = status.LastUpdate.Time
+				}
+			}
+
+			if oldestDB != (time.Time{}) && (updated == (time.Time{}) || updated.Before(oldestDB)) {
+				nextprimary = i
+				updated = oldestDB
+			}
+		}
+	}
+	if nextprimary != -1 {
+		return nextprimary
+	}
+	return firststandby
+}
+
 type PromoteStandby struct{}
 
 func (cmd PromoteStandby) Run(ctx context.Context, cfg *Config, cluster Cluster) error {
 	// We ignore errors here, since we just want the first reachable standby.
 	dbstates := LoadDBStates(ctx, cfg, cluster)
 
-	nextprimary := -1
-	for i, state := range dbstates {
-		if state.Role == "standby" {
-			nextprimary = i
-			break
-		}
-	}
+	nextprimary := PickNextPrimary(dbstates)
 	if nextprimary == -1 {
 		return fmt.Errorf("failed to find a reachable standby to promote")
 	}
