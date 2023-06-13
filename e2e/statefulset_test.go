@@ -37,6 +37,8 @@ const (
 	TLSModeRequired         = 2
 )
 
+const ToxiProxyImage = "toxiproxy:latest"
+
 type StatefulSetConfig struct {
 	NumReplicas int32
 	Username    string
@@ -202,6 +204,23 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 							Name:      "dolt-config",
 							MountPath: "/etc/dolt",
 						}},
+					}, {
+						Name:            "toxiproxy",
+						Image:           ToxiProxyImage,
+						ImagePullPolicy: v1.PullNever,
+						Command:         []string{"/usr/local/bin/toxiproxy-server", "-host", "0.0.0.0", "-config", "toxiproxy.json"},
+						Ports: []v1.ContainerPort{{
+							Name:          "remotesapi",
+							ContainerPort: 50051,
+						}, {
+							Name:          "toxiproxy",
+							ContainerPort: 8474,
+						}},
+						WorkingDir: "/etc/toxiproxy",
+						VolumeMounts: []v1.VolumeMount{{
+							Name:      "toxiproxy-config",
+							MountPath: "/etc/toxiproxy",
+						}},
 					}},
 					InitContainers: []v1.Container{{
 						Name:            "init-dolt",
@@ -247,6 +266,15 @@ cp /etc/dolt/"${POD_NAME}".yaml /var/doltdb/config.yaml
 								},
 							},
 						},
+					}, {
+						Name: "toxiproxy-config",
+						VolumeSource: v1.VolumeSource{
+							ConfigMap: &v1.ConfigMapVolumeSource{
+								LocalObjectReference: v1.LocalObjectReference{
+									Name: "dolt-toxiproxy",
+								},
+							},
+						},
 					}},
 				},
 			},
@@ -265,7 +293,7 @@ cluster:
   bootstrap_epoch: 1
   bootstrap_role: primary
   remotesapi:
-    port: 50051
+    port: 50052
 listener:
   host: 0.0.0.0
   port: 3306
@@ -325,7 +353,7 @@ cluster:
 	parts = append(parts, fmt.Sprintf(`  bootstrap_epoch: 1
   bootstrap_role: %s
   remotesapi:
-    port: 50051
+    port: 50052
 %s
 `, role, ListenerStanza(config)))
 	if config.Username != "" {
@@ -368,6 +396,23 @@ func SqlServerConfigMaps(name, namespace string, config StatefulSetConfig) []*v1
 		Data:       data,
 	}
 	ret = append(ret, serverConfig)
+
+	toxiproxyConfig := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-toxiproxy", Namespace: namespace},
+		Data: map[string]string{
+			"toxiproxy.json": `
+[
+  {
+    "name": "cluster_remotesapi",
+    "listen": "[::]:50051",
+    "upstream": "127.0.0.1:50052",
+    "enabled": true
+  }
+]
+`,
+		},
+	}
+	ret = append(ret, toxiproxyConfig)
 
 	return ret
 }
