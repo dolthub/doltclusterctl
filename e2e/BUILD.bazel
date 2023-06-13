@@ -47,6 +47,7 @@ sh_test(
     data = [
         ":dolt.tar",
         ":e2e_test",
+        ":toxiproxy.tar",
         "//:image.tar",
         "//e2e/incluster:incluster.tar",
         "@go_sdk//:files",
@@ -71,5 +72,25 @@ oci_tarball(
     name = "dolt.tar",
     image = ":dolt",
     repo_tags = ["dolt:latest"],
+    visibility = ["//visibility:private"],
+)
+
+pkg_tar(
+    name = "toxiproxy_layer",
+    srcs = ["@toxiproxy_release_linux_amd64//:toxiproxy-server"],
+    package_dir = "/usr/local/bin",
+)
+
+oci_image(
+    name = "toxiproxy",
+    base = "@ubuntu2004",
+    tars = [":toxiproxy_layer"],
+    visibility = ["//visibility:private"],
+)
+
+oci_tarball(
+    name = "toxiproxy.tar",
+    image = ":toxiproxy",
+    repo_tags = ["toxiproxy:latest"],
     visibility = ["//visibility:private"],
 )
