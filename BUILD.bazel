@@ -46,6 +46,7 @@ go_library(
     importpath = "github.com/dolthub/doltclusterctl",
     visibility = ["//visibility:private"],
     deps = [
+        "@com_github_cenkalti_backoff_v4//:backoff",
         "@com_github_go_sql_driver_mysql//:mysql",
         "@io_k8s_api//apps/v1:apps",
         "@io_k8s_api//core/v1:core",

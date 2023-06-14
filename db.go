@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
 )
 
 func OpenDB(ctx context.Context, cfg *Config, instance Instance) (*sql.DB, error) {
@@ -96,29 +99,43 @@ func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {
 		return fmt.Errorf("error loading role and epoch for %s: %w", instance.Name(), err)
 	}
 
-	db, err := OpenDB(ctx, cfg, instance)
-	if err != nil {
-		return DBState{Err: errf(err)}
-	}
-	defer db.Close()
+	var res DBState
 
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return DBState{Err: errf(err)}
-	}
-	defer conn.Close()
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = time.Second * 10
+	backoff.Retry(func() error {
+		res = DBState{Instance: instance}
 
-	role, epoch, err := loadRoleAndEpoch(ctx, conn)
-	if err != nil {
-		return DBState{Err: errf(err)}
-	}
+		db, err := OpenDB(ctx, cfg, instance)
+		if err != nil {
+			res.Err = errf(err)
+			return res.Err
+		}
+		defer db.Close()
 
-	state := DBState{role, epoch, instance, nil, nil, nil}
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			res.Err = errf(err)
+			return res.Err
+		}
+		defer conn.Close()
 
-	loadStatusRows(ctx, conn, &state)
-	loadDBRemotes(ctx, conn, &state)
+		role, epoch, err := loadRoleAndEpoch(ctx, conn)
+		if err != nil {
+			res.Err = errf(err)
+			return res.Err
+		}
 
-	return state
+		res.Role = role
+		res.Epoch = epoch
+
+		loadStatusRows(ctx, conn, &res)
+		loadDBRemotes(ctx, conn, &res)
+
+		return res.Err
+	}, bo)
+
+	return res
 }
 
 func loadStatusRows(ctx context.Context, conn *sql.Conn, state *DBState) {
@@ -168,17 +185,23 @@ func loadDBRemotes(ctx context.Context, conn *sql.Conn, state *DBState) {
 }
 
 func loadDBRemote(ctx context.Context, conn *sql.Conn, db, remote string) (DBRemote, error) {
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT url FROM `%s`.dolt_remotes WHERE name = ?", db), remote)
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", db))
 	if err != nil {
 		return DBRemote{}, err
 	}
-	if !rows.Next() {
-		return DBRemote{}, errors.New("error loading db remote: did not find a remote matching the name in the database")
+
+	rows, err := conn.QueryContext(ctx, "SELECT url FROM dolt_remotes WHERE name = ?", remote)
+	if err != nil {
+		return DBRemote{}, err
 	}
 	var url string
-	err = rows.Scan(&url)
-	if err != nil {
-		return DBRemote{}, fmt.Errorf("error loading db remote: could not scan url: %w", err)
+	if rows.Next() {
+		err = rows.Scan(&url)
+		if err != nil {
+			return DBRemote{}, fmt.Errorf("error loading db remote: could not scan url: %w", err)
+		}
+	} else if rows.Err() == nil {
+		return DBRemote{}, errors.New("error loading db remote: did not find a remote matching the name in the database")
 	}
 	if rows.Next() {
 		return DBRemote{}, errors.New("error loading db remote: found more than one a remote matching the name in the database")
