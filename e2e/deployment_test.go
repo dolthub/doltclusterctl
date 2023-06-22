@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
-const DoltImage = "docker.io/library/dolt:latest"
+const DoltImage = "docker.io/library/dolt"
 
 var DeploymentKey *struct{}
 
@@ -91,7 +91,7 @@ func NewDeployment(namespace string) *appsv1.Deployment {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{{
 						Name:            "dolt",
-						Image:           DoltImage,
+						Image:           DoltImage + ":latest",
 						ImagePullPolicy: v1.PullNever,
 						Command:         []string{"/usr/local/bin/dolt", "sql-server", "-H", "0.0.0.0"},
 						Ports: []v1.ContainerPort{{
@@ -110,7 +110,7 @@ func NewDeployment(namespace string) *appsv1.Deployment {
 					}},
 					InitContainers: []v1.Container{{
 						Name:            "init-dolt",
-						Image:           DoltImage,
+						Image:           DoltImage + ":latest",
 						ImagePullPolicy: v1.PullNever,
 						Command: []string{"/bin/bash", "-c", `
 dolt config --global --set metrics.disabled true

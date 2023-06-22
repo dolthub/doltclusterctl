@@ -23,9 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/toxiproxy/client"
 	"github.com/cenkalti/backoff/v4"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/Shopify/toxiproxy/client"
 )
 
 var ToxiProxyEndpoint = flag.String("toxiproxy-endpoint", "localhost:8474", "the toxiproxy endpoint with which to interact")

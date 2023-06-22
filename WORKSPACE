@@ -111,6 +111,21 @@ http_archive(
 # Dolt release for e2e tests
 #############################
 
+# We use dolt-1.5.0 as a version that does not have `call
+# dolt_cluster_transition_to_standby()` to assert correct behavior of
+# `gracefulfailover` when that procedure is missing.
+http_archive(
+    name = "dolt_1_5_0_release_linux_amd64",
+    build_file_content = """
+exports_files(["bin/dolt"])
+""",
+    sha256 = "c4c0fca3609b749e4827e198a79cd1168480fbda8a924259bfb6b4fa6573e6b6",
+    strip_prefix = "dolt-linux-amd64",
+    urls = [
+        "https://github.com/dolthub/dolt/releases/download/v1.5.0/dolt-linux-amd64.tar.gz",
+    ],
+)
+
 http_archive(
     name = "dolt_release_linux_amd64",
     build_file_content = """

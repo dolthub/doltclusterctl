@@ -44,6 +44,7 @@ type StatefulSetConfig struct {
 	Username    string
 	Password    string
 	TLSMode     TLSMode
+	ImageTag    string
 }
 
 // Context state which represents the configuration and created resources for
@@ -122,6 +123,12 @@ func WithTLSMode(mode TLSMode) StatefulSetOption {
 	}
 }
 
+func WithImageTag(tag string) StatefulSetOption {
+	return func(config *StatefulSetConfig) {
+		config.ImageTag = tag
+	}
+}
+
 func CreateStatefulSet(opts ...StatefulSetOption) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		var config StatefulSetConfig
@@ -171,6 +178,10 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 	if config.NumReplicas == 0 {
 		config.NumReplicas = 2
 	}
+	tag := "latest"
+	if config.ImageTag != "" {
+		tag = config.ImageTag
+	}
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
 		Spec: appsv1.StatefulSetSpec{
@@ -185,7 +196,7 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{{
 						Name:            "dolt",
-						Image:           DoltImage,
+						Image:           DoltImage + ":" + tag,
 						ImagePullPolicy: v1.PullNever,
 						Command:         []string{"/usr/local/bin/dolt", "sql-server", "--config", "config.yaml"},
 						Ports: []v1.ContainerPort{{
@@ -224,7 +235,7 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 					}},
 					InitContainers: []v1.Container{{
 						Name:            "init-dolt",
-						Image:           DoltImage,
+						Image:           DoltImage + ":" + tag,
 						ImagePullPolicy: v1.PullNever,
 						Command: []string{"/bin/bash", "-c", `
 dolt config --global --set metrics.disabled true

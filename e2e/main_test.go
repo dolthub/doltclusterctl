@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 		CreateDoltClusterCtlServiceAccount,
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLTCLUSTERCTL_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLT_TAR")),
+		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("DOLT_150_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("TOXIPROXY_TAR")),
 		envfuncs.LoadImageArchiveToCluster(kindClusterName, os.Getenv("INCLUSTER_TAR")),
 		CreateServices,

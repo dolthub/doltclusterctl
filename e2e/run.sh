@@ -22,6 +22,7 @@ export PATH="${RUNFILES}/go_sdk/bin":"${PATH}"
 
 export DOLTCLUSTERCTL_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/image.tar/tarball.tar
 export DOLT_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/dolt.tar/tarball.tar
+export DOLT_150_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/dolt-1.5.0.tar/tarball.tar
 export TOXIPROXY_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/toxiproxy.tar/tarball.tar
 export INCLUSTER_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/incluster/incluster.tar/tarball.tar
 

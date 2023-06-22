@@ -46,6 +46,7 @@ sh_test(
     srcs = ["run.sh"],
     data = [
         ":dolt.tar",
+        ":dolt-1.5.0.tar",
         ":e2e_test",
         ":toxiproxy.tar",
         "//:image.tar",
@@ -72,6 +73,26 @@ oci_tarball(
     name = "dolt.tar",
     image = ":dolt",
     repo_tags = ["dolt:latest"],
+    visibility = ["//visibility:private"],
+)
+
+pkg_tar(
+    name = "dolt_1_5_0_layer",
+    srcs = ["@dolt_1_5_0_release_linux_amd64//:bin/dolt"],
+    package_dir = "/usr/local/bin",
+)
+
+oci_image(
+    name = "dolt_1_5_0",
+    base = "@ubuntu2004",
+    tars = [":dolt_1_5_0_layer"],
+    visibility = ["//visibility:private"],
+)
+
+oci_tarball(
+    name = "dolt-1.5.0.tar",
+    image = ":dolt_1_5_0",
+    repo_tags = ["dolt:v1.5.0"],
     visibility = ["//visibility:private"],
 )
 
