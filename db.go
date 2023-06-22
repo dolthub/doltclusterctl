@@ -129,6 +129,7 @@ func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {
 		res.Role = role
 		res.Epoch = epoch
 
+		loadVersion(ctx, conn, &res)
 		loadStatusRows(ctx, conn, &res)
 		loadDBRemotes(ctx, conn, &res)
 
@@ -138,7 +139,29 @@ func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {
 	return res
 }
 
+func loadVersion(ctx context.Context, conn *sql.Conn, state *DBState) {
+	if state.Err != nil {
+		return
+	}
+
+	row := conn.QueryRowContext(ctx, "SELECT dolt_version()")
+	if row.Err() != nil {
+		state.Err = fmt.Errorf("error loading dolt_version table function: %w", row.Err())
+		return
+	}
+
+	err := row.Scan(&state.Version)
+	if err != nil {
+		state.Err = fmt.Errorf("error scanning column of dolt_version table as string: %w", err)
+		return
+	}
+}
+
 func loadStatusRows(ctx context.Context, conn *sql.Conn, state *DBState) {
+	if state.Err != nil {
+		return
+	}
+
 	rows, err := conn.QueryContext(ctx, "SELECT `database`, role, epoch, standby_remote, replication_lag_millis, last_update, current_error FROM `dolt_cluster`.`dolt_cluster_status`")
 	if err != nil {
 		state.Err = fmt.Errorf("error loading dolt_cluster_status table: %w", err)
@@ -257,6 +280,7 @@ type DBState struct {
 	Instance Instance
 	Status   []StatusRow
 	Remotes  []DBRemote
+	Version  string
 	Err      error
 }
 
