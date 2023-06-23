@@ -70,22 +70,28 @@ type GracefulFailover struct{}
 
 func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluster) error {
 	dbstates := LoadDBStates(ctx, cfg, cluster)
+
+	var errStates []DBState
 	for _, state := range dbstates {
 		if state.Err != nil {
-			// TODO: For now this remains an error.
-			// GracefulFailover is going to require all
-			// standbys to be caught up on all databases.
-			// If one of the databases is down, this is
-			// going to fail. Better to not disrupt traffic
-			// in this case.
-			//
-			// Once we can coordinate
-			// dolt_assume_role('standby', ...) to only
-			// need to true up 2/n+1 replicas, for example,
-			// and doltclusterctl to pick a standby to
-			// become the new primary which is recent
-			// enough, this error can change.
-			return fmt.Errorf("error loading role and epoch for pod %s: %w", state.Instance.Name(), state.Err)
+			errStates = append(errStates, state)
+		}
+	}
+
+	if len(errStates) > 0 {
+		numReachableStandbys := len(dbstates) - len(errStates) - 1
+		if cfg.MinCaughtUpStandbys == -1 {
+			// If we need to catch up all standbys, but we
+			// can't currently reach one of the standbys,
+			// something is wrong. We do not go forward with
+			// the attempt.
+			return fmt.Errorf("error loading role and epoch for pod %s: %w", errStates[0].Instance.Name(), errStates[0].Err)
+		} else if numReachableStandbys < cfg.MinCaughtUpStandbys {
+			if len(errStates) > 0 {
+				return fmt.Errorf("could not reach enough standbys to catch up %d. Out of %d pods, %d were unreachable. For example, contacting pod %s resulted in error: %w", cfg.MinCaughtUpStandbys, len(dbstates), len(errStates), errStates[0].Instance.Name(), errStates[0].Err)
+			} else {
+				return fmt.Errorf("Invalid min-caughtup-standbys of %d provided. Only %d pods are in the cluster, so only %d standbys can ever be caught up.", cfg.MinCaughtUpStandbys, len(dbstates), len(dbstates)-1)
+			}
 		}
 	}
 
@@ -95,13 +101,14 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 		return fmt.Errorf("cannot perform graceful failover: %w", err)
 	}
 
-	nextprimary := (currentprimary + 1) % cluster.NumReplicas()
+	oldPrimary := dbstates[currentprimary].Instance
 	nextepoch := highestepoch + 1
 
-	oldPrimary := dbstates[currentprimary].Instance
-	newPrimary := dbstates[nextprimary].Instance
+	if cfg.MinCaughtUpStandbys != -1 && !VersionSupportsTransitionToStandby(dbstates[currentprimary].Version) {
+		return fmt.Errorf("Cannot perform gracefulfailover with min-caughtup-standbys of %d. The version of Dolt on the current primary (%s on pod %s) does not support dolt_cluster_transition_to_standby.", cfg.MinCaughtUpStandbys, dbstates[currentprimary].Version, oldPrimary.Name())
+	}
 
-	log.Printf("failing over from %s to %s", oldPrimary.Name(), newPrimary.Name())
+	log.Printf("failing over from %s", oldPrimary.Name())
 
 	for _, state := range dbstates {
 		err := state.Instance.MarkRoleStandby(ctx)
@@ -112,11 +119,27 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 
 	log.Printf("labeled all pods standby")
 
-	err = CallAssumeRole(ctx, cfg, oldPrimary, "standby", nextepoch)
-	if err != nil {
-		return err
+	var newPrimary Instance
+
+	if cfg.MinCaughtUpStandbys == -1 {
+		nextprimary := (currentprimary + 1) % cluster.NumReplicas()
+		newPrimary = dbstates[nextprimary].Instance
+
+		err = CallAssumeRole(ctx, cfg, oldPrimary, "standby", nextepoch)
+		if err != nil {
+			return err
+		}
+		log.Printf("called dolt_assume_cluster_role standby on %s", oldPrimary.Name())
+	} else {
+		nextprimary, err := CallTransitionToStandby(ctx, cfg, oldPrimary, nextepoch, dbstates)
+		if err != nil {
+			return err
+		}
+		log.Printf("called dolt_cluster_transition_to_standby on %s", oldPrimary.Name())
+		newPrimary = dbstates[nextprimary].Instance
 	}
-	log.Printf("called dolt_assume_cluster_role standby on %s", oldPrimary.Name())
+
+	log.Printf("failing over to %s", newPrimary.Name())
 
 	err = CallAssumeRole(ctx, cfg, newPrimary, "primary", nextepoch)
 	if err != nil {

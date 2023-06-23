@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -92,6 +93,88 @@ func CallAssumeRole(ctx context.Context, cfg *Config, instance Instance, role st
 	}
 
 	return nil
+}
+
+func CallTransitionToStandby(ctx context.Context, cfg *Config, instance Instance, epoch int, dbstates []DBState) (int, error) {
+	db, err := OpenDB(ctx, cfg, instance)
+	if err != nil {
+		return -1, err
+	}
+	defer db.Close()
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return -1, err
+	}
+	defer conn.Close()
+
+	type TransitionResult struct {
+		CaughtUp  int
+		Database  string
+		Remote    string
+		RemoteURL string
+		Parsed    *url.URL
+	}
+	var results []TransitionResult
+
+	q := fmt.Sprintf("CALL DOLT_CLUSTER_TRANSITION_TO_STANDBY('%d', '%d')", epoch, cfg.MinCaughtUpStandbys)
+	rows, err := conn.QueryContext(ctx, q)
+	if err != nil {
+		return -1, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var res TransitionResult
+		err = rows.Scan(&res.CaughtUp, &res.Database, &res.Remote, &res.RemoteURL)
+		if err != nil {
+			return -1, err
+		}
+		results = append(results, res)
+	}
+	if rows.Err() != nil {
+		return -1, rows.Err()
+	}
+
+	numCaughtUp := make(map[string]int)
+	for _, res := range results {
+		var err error
+		res.Parsed, err = url.Parse(res.RemoteURL)
+		if err != nil {
+			return -1, err
+		}
+		numCaughtUp[res.Parsed.Host] = numCaughtUp[res.Parsed.Host] + 1
+	}
+
+	var maxCaughtUpHost string
+	var maxCaughtUp int
+	for k, v := range numCaughtUp {
+		if v > maxCaughtUp {
+			maxCaughtUpHost = k
+			maxCaughtUp = v
+		}
+	}
+
+	var maxCaughtUpParsedURL *url.URL
+	for _, res := range results {
+		if res.Parsed.Host == maxCaughtUpHost {
+			maxCaughtUpParsedURL = res.Parsed
+			break
+		}
+	}
+
+	if maxCaughtUpParsedURL == nil {
+		return -1, fmt.Errorf("internal error: did not find caught up URL of the caught up host: %s", maxCaughtUpHost)
+	}
+	caughtUpHostname := maxCaughtUpParsedURL.Hostname()
+
+	for i, dbs := range dbstates {
+		instanceHostname := dbs.Instance.Hostname()
+		if instanceHostname == caughtUpHostname || strings.HasPrefix(instanceHostname, caughtUpHostname) {
+			return i, nil
+		}
+	}
+
+	return -1, fmt.Errorf("internal error: did not find caught up URL of the caught up host: %s", maxCaughtUpHost)
 }
 
 func LoadDBState(ctx context.Context, cfg *Config, instance Instance) DBState {

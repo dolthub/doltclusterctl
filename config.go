@@ -57,10 +57,16 @@ type Config struct {
 	CommandStr      string
 	StatefulSetName string
 	Command         Command
+
+	// The number of standbys which must be caught up, when running a
+	// graceful failover, in order to proceed.
+	MinCaughtUpStandbys int
 }
 
 func (c *Config) InitFlagSet(set *flag.FlagSet) {
 	set.StringVar(&c.Namespace, "n", "default", "namespace of the stateful set to operate on")
+
+	set.IntVar(&c.MinCaughtUpStandbys, "min-caughtup-standbys", -1, "the number of standby servers which must be caughtup on a graceful failover in order to succeed")
 
 	set.Func("tls-server-name", "if provided, enables manadatory verified TLS mode and overrides the server name to verify as the CN or SAN of the leaf certificate (and present in SNI)", func(sn string) error {
 		if c.TLSInsecure {
