@@ -39,7 +39,7 @@ The next parameter is the operation to run. The operations are:
 - `promotestandby`
 - `rollingrestart`
 
-The last parameter is the name of the stateful on which to operate.
+The last parameter is the name of the stateful set on which to operate.
 
 Operations
 ----------
@@ -57,7 +57,13 @@ labeled with `dolthub.com/cluster_role=primary`.
 1. Removes routing of traffic to the current primary.
 2. Makes the current primary assume role standby.
 3. Makes a different chosen standby server assume role primary.
-4. Strats routing traffic to the new primary.
+4. Starts routing traffic to the new primary.
+
+For a cluster with more than one standby, a useful option is
+`-min-caughtup-standbys N`, which can be given to `gracefulfailover`. In that
+case, `gracefulfailover` will succeed as long as at least `N` standbys can be
+caught up. The standby which gets promoted to `primary` will be one of the
+standbys which was successfully caught up.
 
 `promotestandby` is more aggressive in its behavior. Without causing the
 existing primary to assume role standby, it makes a server in the cluster which
@@ -86,7 +92,5 @@ default, it uses `root` with no password.
 
 TODO
 ====
-
-* There should be a way to perform a gracefulfailover even when one or more standbys are unavailable but there are still available standbys which can be brought up to date by the primary. This requires changes to dolt's `dolt_assume_cluster_role` stored procedure.
 
 * There should be a way of manually selecting a replica to become a primary in the case of something like `detected_broken_config`.
