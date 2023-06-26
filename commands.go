@@ -78,20 +78,23 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 		}
 	}
 
-	if len(errStates) > 0 {
-		numReachableStandbys := len(dbstates) - len(errStates) - 1
-		if cfg.MinCaughtUpStandbys == -1 {
-			// If we need to catch up all standbys, but we
-			// can't currently reach one of the standbys,
-			// something is wrong. We do not go forward with
-			// the attempt.
-			return fmt.Errorf("error loading role and epoch for pod %s: %w", errStates[0].Instance.Name(), errStates[0].Err)
-		} else if numReachableStandbys < cfg.MinCaughtUpStandbys {
-			if len(errStates) > 0 {
-				return fmt.Errorf("could not reach enough standbys to catch up %d. Out of %d pods, %d were unreachable. For example, contacting pod %s resulted in error: %w", cfg.MinCaughtUpStandbys, len(dbstates), len(errStates), errStates[0].Instance.Name(), errStates[0].Err)
-			} else {
-				return fmt.Errorf("Invalid min-caughtup-standbys of %d provided. Only %d pods are in the cluster, so only %d standbys can ever be caught up.", cfg.MinCaughtUpStandbys, len(dbstates), len(dbstates)-1)
-			}
+	if len(errStates) > 0 && cfg.MinCaughtUpStandbys == -1 {
+		// If we need to catch up all standbys, but we
+		// can't currently reach one of the standbys,
+		// something is wrong. We do not go forward with
+		// the attempt.
+		return fmt.Errorf("error loading role and epoch for pod %s: %w", errStates[0].Instance.Name(), errStates[0].Err)
+	}
+
+	numStandbys := len(dbstates) - 1
+	numReachableStandbys := len(dbstates) - len(errStates) - 1
+
+	if cfg.MinCaughtUpStandbys != -1 {
+		if numStandbys < cfg.MinCaughtUpStandbys {
+			return fmt.Errorf("Invalid min-caughtup-standbys of %d provided. Only %d pods are in the cluster, so only %d standbys can ever be caught up.", cfg.MinCaughtUpStandbys, len(dbstates), len(dbstates)-1)
+		}
+		if numReachableStandbys < cfg.MinCaughtUpStandbys {
+			return fmt.Errorf("could not reach enough standbys to catch up %d. Out of %d pods, %d were unreachable. For example, contacting pod %s resulted in error: %w", cfg.MinCaughtUpStandbys, len(dbstates), len(errStates), errStates[0].Instance.Name(), errStates[0].Err)
 		}
 	}
 
@@ -127,13 +130,27 @@ func (cmd GracefulFailover) Run(ctx context.Context, cfg *Config, cluster Cluste
 
 		err = CallAssumeRole(ctx, cfg, oldPrimary, "standby", nextepoch)
 		if err != nil {
-			return err
+			log.Printf("failed to transition primary to standby. labeling old primary as primary.")
+			err = oldPrimary.MarkRolePrimary(ctx)
+			if err != nil {
+				log.Printf("ERROR: failed to label old primary as primary.")
+				log.Printf("\t%v", err)
+				log.Printf("dolt-rw endpoint will be broken. You need to run applyprimarylabels.")
+			}
+			return fmt.Errorf("error calling dolt_assume_cluster_role standby on %s: %w", oldPrimary.Name(), err)
 		}
 		log.Printf("called dolt_assume_cluster_role standby on %s", oldPrimary.Name())
 	} else {
 		nextprimary, err := CallTransitionToStandby(ctx, cfg, oldPrimary, nextepoch, dbstates)
 		if err != nil {
-			return err
+			log.Printf("failed to transition primary to standby. labeling old primary as primary.")
+			err = oldPrimary.MarkRolePrimary(ctx)
+			if err != nil {
+				log.Printf("ERROR: failed to label old primary as primary.")
+				log.Printf("\t%v", err)
+				log.Printf("dolt-rw endpoint will be broken. You need to run applyprimarylabels.")
+			}
+			return fmt.Errorf("error calling dolt_cluster_transition_to_standby on %s: %w", oldPrimary.Name(), err)
 		}
 		log.Printf("called dolt_cluster_transition_to_standby on %s", oldPrimary.Name())
 		newPrimary = dbstates[nextprimary].Instance

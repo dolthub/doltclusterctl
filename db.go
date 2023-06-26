@@ -136,13 +136,15 @@ func CallTransitionToStandby(ctx context.Context, cfg *Config, instance Instance
 	}
 
 	numCaughtUp := make(map[string]int)
-	for _, res := range results {
+	for i := range results {
 		var err error
-		res.Parsed, err = url.Parse(res.RemoteURL)
+		results[i].Parsed, err = url.Parse(results[i].RemoteURL)
 		if err != nil {
 			return -1, err
 		}
-		numCaughtUp[res.Parsed.Host] = numCaughtUp[res.Parsed.Host] + 1
+		if results[i].CaughtUp == 1 {
+			numCaughtUp[results[i].Parsed.Host] = numCaughtUp[results[i].Parsed.Host] + 1
+		}
 	}
 
 	var maxCaughtUpHost string

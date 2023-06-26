@@ -152,11 +152,7 @@ func RunDoltClusterCtlJob(opts ...DCCJobOption) features.Func {
 			t.Fatalf("expected job to fail with '%s' but the job succeeded", dccjob.FailMatch)
 		}
 
-		if !success && dccjob.FailMatch == "" {
-			t.Fatalf("expected job to succeed but if failed")
-		}
-
-		if !success && dccjob.FailMatch != "" {
+		if !success {
 			// TODO: We need to assert on the fail match in the logs for the pod for the job.
 			podselector := job.Spec.Selector
 			var pods v1.PodList
@@ -185,9 +181,14 @@ func RunDoltClusterCtlJob(opts ...DCCJobOption) features.Func {
 			if err != nil {
 				t.Fatalf("error retreiving pod logs: %v", err)
 			}
+
 			contentsStr := contents.String()
-			if !strings.Contains(contentsStr, dccjob.FailMatch) {
-				t.Fatalf("failed to find expected match '%s' in pod logs:\n%s", dccjob.FailMatch, contentsStr)
+			if dccjob.FailMatch != "" {
+				if !strings.Contains(contentsStr, dccjob.FailMatch) {
+					t.Fatalf("failed to find expected match '%s' in pod logs:\n%s", dccjob.FailMatch, contentsStr)
+				}
+			} else {
+				t.Fatalf("expected job to succeed but it failed:\n%s", contentsStr)
 			}
 		}
 
