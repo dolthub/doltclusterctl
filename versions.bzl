@@ -22,10 +22,10 @@ DEPS = struct(
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "6a1724da492e91f1cf37c1a5eebbdc429e4ffd4f8d789a95ad6e303d657d8312",
+        sha256 = "181331383e69bc6c8b608bac5c924914989841e756d20c126356bd954fd87816",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.6.0/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.6.1/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
