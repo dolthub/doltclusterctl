@@ -63,7 +63,8 @@ For a cluster with more than one standby, a useful option is
 `-min-caughtup-standbys N`, which can be given to `gracefulfailover`. In that
 case, `gracefulfailover` will succeed as long as at least `N` standbys can be
 caught up. The standby which gets promoted to `primary` will be one of the
-standbys which was successfully caught up.
+standbys which was successfully caught up. This option requires Dolt 1.6.0 or
+higher.
 
 `promotestandby` is more aggressive in its behavior. Without causing the
 existing primary to assume role standby, it makes a server in the cluster which
