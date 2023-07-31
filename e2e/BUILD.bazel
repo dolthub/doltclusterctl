@@ -51,7 +51,7 @@ sh_test(
         ":toxiproxy.tar",
         "//:image.tar",
         "//e2e/incluster:incluster.tar",
-        "@go_sdk//:files",
+        "@io_k8s_sigs_kind//:kind",
     ],
     tags = ["manual"],
 )

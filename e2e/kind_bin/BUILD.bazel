@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "kind_bin_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/dolthub/doltclusterctl/e2e/kind_bin",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_google_safetext//yamltemplate",
+        "@io_k8s_sigs_kind//pkg/fs",
+    ],
+)
+
+go_binary(
+    name = "kind_bin",
+    embed = [":kind_bin_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -26,4 +26,8 @@ export DOLT_150_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/dolt-1.5
 export TOXIPROXY_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/toxiproxy.tar/tarball.tar
 export INCLUSTER_TAR="${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/incluster/incluster.tar/tarball.tar
 
+export KIND_PATH="${RUNFILES}"/io_k8s_sigs_kind/kind_/
+export KIND_BIN="${KIND_PATH}"/kind
+export PATH="${KIND_PATH}":"${PATH}"
+
 exec "${RUNFILES}"/com_github_dolthub_doltclusterctl/e2e/e2e_test_/e2e_test "$@"

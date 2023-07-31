@@ -1,10 +1,10 @@
 DEPS = struct(
     bazel_gazelle = struct(
-        sha256 = "b8b6d75de6e4bf7c41b7737b183523085f56283f6db929b86c5e7e1f09cf59c9",
+        sha256 = "29218f8e0cebe583643cbf93cae6f971be8a2484cdcfa1e45057658df8d54002",
         strip_prefix = "",
         urls = [
-            "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.1/bazel-gazelle-v0.31.1.tar.gz",
-            "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.31.1/bazel-gazelle-v0.31.1.tar.gz",
+            "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.32.0/bazel-gazelle-v0.32.0.tar.gz",
+            "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.32.0/bazel-gazelle-v0.32.0.tar.gz",
         ],
     ),
     com_github_bazelbuild_buildtools = struct(
@@ -15,32 +15,32 @@ DEPS = struct(
         ],
     ),
     com_google_protobuf = struct(
-        sha256 = "3a5f47ad3aa10192c5577ff086b24b9739a36937c34ceab6db912a16a3ef7f8e",
-        strip_prefix = "protobuf-23.3",
+        sha256 = "a700a49470d301f1190a487a923b5095bf60f08f4ae4cac9f5f7c36883d17971",
+        strip_prefix = "protobuf-23.4",
         urls = [
-            "https://github.com/protocolbuffers/protobuf/releases/download/v23.3/protobuf-23.3.tar.gz",
+            "https://github.com/protocolbuffers/protobuf/releases/download/v23.4/protobuf-23.4.tar.gz",
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "181331383e69bc6c8b608bac5c924914989841e756d20c126356bd954fd87816",
+        sha256 = "fa6e503706a492e43239930dc411b4e94220b4255151294f45181b7f86cac939",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.6.1/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.8.7/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
-        sha256 = "bfc5ce70b9d1634ae54f4e7b495657a18a04e0d596785f672d35d5f505ab491a",
+        sha256 = "278b7ff5a826f3dc10f04feaf0b70d48b68748ccd512d7f98bf442077f043fe3",
         strip_prefix = "",
         urls = [
-            "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.40.0/rules_go-v0.40.0.zip",
-            "https://github.com/bazelbuild/rules_go/releases/download/v0.40.0/rules_go-v0.40.0.zip",
+            "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.41.0/rules_go-v0.41.0.zip",
+            "https://github.com/bazelbuild/rules_go/releases/download/v0.41.0/rules_go-v0.41.0.zip",
         ],
     ),
     rules_oci = struct(
-        sha256 = "db57efd706f01eb3ce771468366baa1614b5b25f4cce99757e2b8d942155b8ec",
-        strip_prefix = "rules_oci-1.0.0",
+        sha256 = "176e601d21d1151efd88b6b027a24e782493c5d623d8c6211c7767f306d655c8",
+        strip_prefix = "rules_oci-1.2.0",
         urls = [
-            "https://github.com/bazel-contrib/rules_oci/releases/download/v1.0.0/rules_oci-v1.0.0.tar.gz",
+            "https://github.com/bazel-contrib/rules_oci/releases/download/v1.2.0/rules_oci-v1.2.0.tar.gz",
         ],
     ),
     rules_pkg = struct(
