@@ -54,6 +54,7 @@ sh_test(
         "@io_k8s_sigs_kind//:kind",
     ],
     tags = ["manual"],
+    timeout = "eternal",
 )
 
 pkg_tar(

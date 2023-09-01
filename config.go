@@ -100,7 +100,7 @@ func (c *Config) InitFlagSet(set *flag.FlagSet) {
 	set.Var((*tlsInsecureFlagValue)(c), "tls-insecure", "if true, enables tls mode for communicating with the server, but does not verify the server's certificate")
 
 	set.DurationVar(&c.Timeout, "timeout", time.Second*30, "the number of seconds the entire command has to run before it timeouts and exits non-zero")
-	set.DurationVar(&c.WaitForReady, "wait-for-ready", time.Second*50, "the number of seconds to wait for a single pod to become ready when performing a rollingrestart until we consider the operation failed")
+	set.DurationVar(&c.WaitForReady, "wait-for-ready", time.Second*120, "the number of seconds to wait for a single pod to become ready when performing a rollingrestart until we consider the operation failed")
 
 	set.Usage = func() {
 		fmt.Fprintf(set.Output(), "Usage of %s:\n\n", set.Name())
