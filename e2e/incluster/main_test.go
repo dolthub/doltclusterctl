@@ -237,6 +237,36 @@ func TestCreateSomeData(t *testing.T) {
 	}
 }
 
+func TestCreateSomeMoreData(t *testing.T) {
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = time.Second * 10
+	err := backoff.Retry(func() error {
+		db, err := sql.Open("mysql", GetDSN())
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		ctx := context.TODO()
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		_, err = conn.ExecContext(ctx, "USE testdata")
+		if err != nil {
+			return err
+		}
+		_, err = conn.ExecContext(ctx, "INSERT INTO vals (id, val) VALUES (10,89),(11,144),(12,233),(13,377),(14,610)")
+		if err != nil {
+			return backoff.Permanent(err)
+		}
+		return nil
+	}, bo)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAssertCreatedDataPresent(t *testing.T) {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxElapsedTime = time.Second * 10
@@ -267,6 +297,44 @@ func TestAssertCreatedDataPresent(t *testing.T) {
 		}
 		if count != 10 {
 			return fmt.Errorf("expected count to be 10, but was %d", count)
+		}
+		return nil
+	}, bo)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAssertMoreCreatedDataPresent(t *testing.T) {
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = time.Second * 10
+	err := backoff.Retry(func() error {
+		db, err := sql.Open("mysql", GetDSN())
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		ctx := context.TODO()
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		_, err = conn.ExecContext(ctx, "USE testdata")
+		if err != nil {
+			return err
+		}
+		row := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM vals")
+		if row.Err() != nil {
+			return row.Err()
+		}
+		var count int
+		err = row.Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count != 15 {
+			return fmt.Errorf("expected count to be 15, but was %d", count)
 		}
 		return nil
 	}, bo)

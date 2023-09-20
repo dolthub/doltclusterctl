@@ -100,9 +100,10 @@ func TestGracefulFailover(t *testing.T) {
 			Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 			Assess("CreateData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeData", DBName: "dolt-rw"})).
 			Assess("dolt-1/DisableRemotesAPI", RunUnitTestInCluster(InClusterTest{TestName: "TestDisableRemotesAPI", ToxiProxyEndpoint: "dolt-1.dolt-internal:8474"})).
+			Assess("CreateMoreData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeMoreData", DBName: "dolt-rw"})).
 			Assess("RunGracefulFailover", RunDoltClusterCtlJob(
-				WithArgs("-min-caughtup-standbys", "1", "gracefulfailover", "dolt"))).
-			Assess("AssertData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertCreatedDataPresent", DBName: "dolt-rw"})).
+				WithArgs("-timeout", "2m", "-min-caughtup-standbys", "1", "gracefulfailover", "dolt"))).
+			Assess("AssertMoreData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertMoreCreatedDataPresent", DBName: "dolt-rw"})).
 			Assess("dolt-0/IsStandby", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "standby")).
 			Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
 			Assess("dolt-2/IsPrimary", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "primary")).
@@ -115,10 +116,11 @@ func TestGracefulFailover(t *testing.T) {
 			Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 			Assess("CreateData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeData", DBName: "dolt-rw"})).
 			Assess("dolt-1/DisableRemotesAPI", RunUnitTestInCluster(InClusterTest{TestName: "TestDisableRemotesAPI", ToxiProxyEndpoint: "dolt-1.dolt-internal:8474"})).
+			Assess("CreateMoreData", RunUnitTestInCluster(InClusterTest{TestName: "TestCreateSomeMoreData", DBName: "dolt-rw"})).
 			Assess("RunGracefulFailover", RunDoltClusterCtlJob(
 				WithArgs("-min-caughtup-standbys", "2", "gracefulfailover", "dolt"),
 				ShouldFailWith("failed to transition primary to standby. labeling old primary as primary."))).
-			Assess("AssertData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertCreatedDataPresent", DBName: "dolt-rw"})).
+			Assess("AssertData", RunUnitTestInCluster(InClusterTest{TestName: "TestAssertMoreCreatedDataPresent", DBName: "dolt-rw"})).
 			Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).
 			Assess("dolt-1/IsStandby", AssertPodHasLabel("dolt-1", "dolthub.com/cluster_role", "standby")).
 			Assess("dolt-2/IsStandby", AssertPodHasLabel("dolt-2", "dolthub.com/cluster_role", "standby")).

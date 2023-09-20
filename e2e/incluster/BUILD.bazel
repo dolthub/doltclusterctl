@@ -7,6 +7,7 @@ go_test(
     srcs = ["main_test.go"],
     goarch = "amd64",
     goos = "linux",
+    testonly = False,
     deps = [
         "@com_github_cenkalti_backoff_v4//:backoff",
         "@com_github_go_sql_driver_mysql//:mysql",
@@ -16,7 +17,6 @@ go_test(
 
 pkg_tar(
     name = "incluster_layer",
-    testonly = True,
     srcs = [
         ":incluster_test",
     ],
@@ -26,14 +26,12 @@ pkg_tar(
 
 oci_image(
     name = "incluster",
-    testonly = True,
     base = "@ubuntu2004",
     tars = [":incluster_layer"],
 )
 
 oci_tarball(
     name = "incluster.tar",
-    testonly = True,
     image = ":incluster",
     repo_tags = ["incluster:latest"],
     visibility = ["//visibility:public"],
