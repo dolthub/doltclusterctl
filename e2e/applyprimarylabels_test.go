@@ -196,9 +196,9 @@ func RunDoltClusterCtlJob(opts ...DCCJobOption) features.Func {
 	}
 }
 
-func JobCompletedOrFailed(resources *resources.Resources, job k8s.Object, success *bool) apimachinerywait.ConditionFunc {
-	return func() (done bool, err error) {
-		if err := resources.Get(context.TODO(), job.GetName(), job.GetNamespace(), job); err != nil {
+func JobCompletedOrFailed(resources *resources.Resources, job k8s.Object, success *bool) apimachinerywait.ConditionWithContextFunc {
+	return func(ctx context.Context) (done bool, err error) {
+		if err := resources.Get(ctx, job.GetName(), job.GetNamespace(), job); err != nil {
 			return false, err
 		}
 		status := job.(*batchv1.Job).Status

@@ -152,8 +152,8 @@ func CreateStatefulSet(opts ...StatefulSetOption) func(ctx context.Context, t *t
 		if statefulset.Spec.Replicas != nil {
 			numReplicas = *statefulset.Spec.Replicas
 		}
-		err = wait.For(func() (bool, error) {
-			if err := client.Resources().Get(context.TODO(), statefulset.GetName(), statefulset.GetNamespace(), statefulset); err != nil {
+		err = wait.For(func(ctx context.Context) (bool, error) {
+			if err := client.Resources().Get(ctx, statefulset.GetName(), statefulset.GetNamespace(), statefulset); err != nil {
 				return false, err
 			}
 			if statefulset.Status.AvailableReplicas == numReplicas {
