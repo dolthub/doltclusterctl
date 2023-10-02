@@ -22,25 +22,25 @@ DEPS = struct(
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "2085c92afda3aac43cc6b92241f8c7e866c0f4c89bac03ff261d73d3c1a5c590",
+        sha256 = "d67f48bcc1ee3248fbf47ba988d936355f839a9217b6f58ae00bef3585819249",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.16.1/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.17.1/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
-        sha256 = "278b7ff5a826f3dc10f04feaf0b70d48b68748ccd512d7f98bf442077f043fe3",
+        sha256 = "91585017debb61982f7054c9688857a2ad1fd823fc3f9cb05048b0025c47d023",
         strip_prefix = "",
         urls = [
-            "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.41.0/rules_go-v0.41.0.zip",
-            "https://github.com/bazelbuild/rules_go/releases/download/v0.41.0/rules_go-v0.41.0.zip",
+            "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.42.0/rules_go-v0.42.0.zip",
+            "https://github.com/bazelbuild/rules_go/releases/download/v0.42.0/rules_go-v0.42.0.zip",
         ],
     ),
     rules_oci = struct(
-        sha256 = "c71c25ed333a4909d2dd77e0b16c39e9912525a98c7fa85144282be8d04ef54c",
-        strip_prefix = "rules_oci-1.3.4",
+        sha256 = "21a7d14f6ddfcb8ca7c5fc9ffa667c937ce4622c7d2b3e17aea1ffbc90c96bed",
+        strip_prefix = "rules_oci-1.4.0",
         urls = [
-            "https://github.com/bazel-contrib/rules_oci/releases/download/v1.3.4/rules_oci-v1.3.4.tar.gz",
+            "https://github.com/bazel-contrib/rules_oci/releases/download/v1.4.0/rules_oci-v1.4.0.tar.gz",
         ],
     ),
     rules_pkg = struct(
