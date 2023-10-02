@@ -4,14 +4,14 @@ load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 go_test(
     name = "incluster_test",
+    testonly = False,
     srcs = ["main_test.go"],
     goarch = "amd64",
     goos = "linux",
-    testonly = False,
     deps = [
         "@com_github_cenkalti_backoff_v4//:backoff",
         "@com_github_go_sql_driver_mysql//:mysql",
-        "@com_github_shopify_toxiproxy//client",
+        "@com_github_shopify_toxiproxy_v2//client",
     ],
 )
 

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/toxiproxy/client"
+	"github.com/Shopify/toxiproxy/v2/client"
 	"github.com/cenkalti/backoff/v4"
 	_ "github.com/go-sql-driver/mysql"
 )

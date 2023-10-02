@@ -43,6 +43,7 @@ go_test(
 
 sh_test(
     name = "e2e",
+    timeout = "eternal",
     srcs = ["run.sh"],
     data = [
         ":dolt.tar",
@@ -54,7 +55,6 @@ sh_test(
         "@io_k8s_sigs_kind//:kind",
     ],
     tags = ["manual"],
-    timeout = "eternal",
 )
 
 pkg_tar(
