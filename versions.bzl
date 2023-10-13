@@ -15,17 +15,17 @@ DEPS = struct(
         ],
     ),
     com_google_protobuf = struct(
-        sha256 = "07d69502e58248927b58c7d7e7424135272ba5b2852a753ab6b67e62d2d29355",
-        strip_prefix = "protobuf-24.3",
+        sha256 = "616bb3536ac1fff3fb1a141450fa28b875e985712170ea7f1bfe5e5fc41e2cd8",
+        strip_prefix = "protobuf-24.4",
         urls = [
-            "https://github.com/protocolbuffers/protobuf/releases/download/v24.3/protobuf-24.3.tar.gz",
+            "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/protobuf-24.4.tar.gz",
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "d67f48bcc1ee3248fbf47ba988d936355f839a9217b6f58ae00bef3585819249",
+        sha256 = "e9eba906397ff9fbde76ee65be781a755e239943593a8d10bcec492f2ba3a666",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.17.1/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.18.1/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
