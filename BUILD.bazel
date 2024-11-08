@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "TOOLS_NOGO", "go_binary", "go_library", "go_test", "nogo")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
@@ -24,13 +24,6 @@ gazelle(
         "disable_global",
     ],
     command = "update-repos",
-)
-
-nogo(
-    name = "nogo",
-    config = "nogo_config.json",
-    visibility = ["//visibility:public"],
-    deps = TOOLS_NOGO + [],
 )
 
 go_library(

@@ -31,8 +31,7 @@ go_dependencies()
 go_rules_dependencies()
 
 go_register_toolchains(
-    nogo = "@//:nogo",
-    version = "1.20.4",
+    version = "1.23.0",
 )
 
 gazelle_dependencies()
