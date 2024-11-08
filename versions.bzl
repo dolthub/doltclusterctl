@@ -15,17 +15,17 @@ DEPS = struct(
         ],
     ),
     com_google_protobuf = struct(
-        sha256 = "616bb3536ac1fff3fb1a141450fa28b875e985712170ea7f1bfe5e5fc41e2cd8",
-        strip_prefix = "protobuf-24.4",
+        sha256 = "7beed9c511d632cff7c22ac0094dd7720e550153039d5da7e059bcceb488474a",
+        strip_prefix = "protobuf-25.0",
         urls = [
-            "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/protobuf-24.4.tar.gz",
+            "https://github.com/protocolbuffers/protobuf/releases/download/v25.0/protobuf-25.0.tar.gz",
         ],
     ),
     dolt_release_linux_amd64 = struct(
-        sha256 = "e9eba906397ff9fbde76ee65be781a755e239943593a8d10bcec492f2ba3a666",
+        sha256 = "4a9b15c5fe93a99a95905edb6beb61c691957c763f1fe47556e68edb43835507",
         strip_prefix = "",
         urls = [
-            "https://github.com/dolthub/dolt/releases/download/v1.18.1/dolt-linux-amd64.tar.gz",
+            "https://github.com/dolthub/dolt/releases/download/v1.43.13/dolt-linux-amd64.tar.gz",
         ],
     ),
     io_bazel_rules_go = struct(
@@ -52,10 +52,10 @@ DEPS = struct(
         ],
     ),
     toxiproxy_release_linux_amd64 = struct(
-        sha256 = "f3514328c66dcccba41ee175639ff96efe7e623515b54e2f82c06578e05a1337",
+        sha256 = "ea4ab0ff1e43a9880ce4f2094c43fe534b6610d1fea97406dcaf8fe7bc210bce",
         strip_prefix = "",
         urls = [
-            "https://github.com/Shopify/toxiproxy/releases/download/v2.6.0/toxiproxy_2.6.0_linux_amd64.tar.gz",
+            "https://github.com/Shopify/toxiproxy/releases/download/v2.7.0/toxiproxy_2.7.0_linux_amd64.tar.gz",
         ],
     ),
 )
