@@ -1,5 +1,13 @@
 build --incompatible_enable_cc_toolchain_resolution
 build --incompatible_strict_action_env
+# Bazel 9 enables the default test toolchain, which (via
+# use_target_platform_constraints) requires an execution platform matching the
+# target platform's constraints. The incluster go_test is platform-transitioned
+# to //:x86_64-linux and only consumed as data (loaded into a kind cluster and
+# run there), never executed by bazel. On a non-Linux host there is no matching
+# exec platform, so toolchain resolution fails. This flag selects the legacy
+# test toolchain, which does not impose that constraint.
+build --use_target_platform_for_tests
 build --cxxopt=-std=c++14
 build --host_cxxopt=-std=c++14
 run --incompatible_strict_action_env

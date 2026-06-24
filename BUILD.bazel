@@ -1,5 +1,5 @@
-load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
@@ -64,7 +64,7 @@ pkg_tar(
 
 oci_image(
     name = "image",
-    base = "@ubuntu2004",
+    base = "@ubuntu2404",
     tars = [
         ":image_layer_transitioned",
     ],
@@ -74,7 +74,7 @@ oci_image(
 oci_load(
     name = "image_load",
     image = "image",
-    repo_tags = ["dolthub/doltclusterctl"],
+    repo_tags = ["doltclusterctl:latest"],
     visibility = ["//visibility:public"],
 )
 
@@ -83,8 +83,13 @@ platform_transition_filegroup(
     srcs = [
         ":image_layer",
     ],
+    # Cross-compile to linux but keep the host CPU so the image runs natively in
+    # a host-arch kind node (amd64 on amd64 hosts/CI, arm64 on Apple Silicon).
+    target_platform = select({
+        "@platforms//cpu:aarch64": "//:aarch64-linux",
+        "//conditions:default": "//:x86_64-linux",
+    }),
     visibility = ["//visibility:private"],
-    target_platform = "//:x86_64-linux",
 )
 
 filegroup(
@@ -120,6 +125,15 @@ platform(
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "aarch64-linux",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
     ],
     visibility = ["//visibility:public"],
 )

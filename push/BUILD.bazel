@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_push")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 oci_push(
     name = "_push_public_image",

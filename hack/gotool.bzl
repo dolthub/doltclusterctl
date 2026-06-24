@@ -6,10 +6,10 @@ def _go_sdk_tool_impl(ctx):
     # bazel to be able to create an executable symlink to that tool and to be
     # able to recreate the symlink if the tool changes.
     go = go_context(ctx)
-    tool_path = paths.join(go.sdk_root.dirname, ctx.attr.goroot_relative_path)
+    tool_path = paths.join(go.sdk.root_file.dirname, ctx.attr.goroot_relative_path)
     tool = None
 
-    sdk_tools = depset([go.go], transitive = [go.sdk_tools])
+    sdk_tools = depset([go.sdk.go], transitive = [go.sdk.tools])
 
     for f in sdk_tools.to_list():
         if f.path == tool_path:

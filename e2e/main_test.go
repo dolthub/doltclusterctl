@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
+	"sigs.k8s.io/e2e-framework/support/kind"
 )
 
 var (
@@ -34,8 +35,11 @@ func TestMain(m *testing.M) {
 	kindClusterName = envconf.RandomName("dolt-test-cluster", 16)
 	namespace = envconf.RandomName("dolt-cluster", 16)
 
+	// The e2e images are built for the host architecture (see
+	// //:host_linux_platform), so a default host-arch kind node runs them
+	// natively: amd64 on amd64 hosts/CI, arm64 on Apple Silicon.
 	testenv.Setup(
-		envfuncs.CreateKindCluster(kindClusterName),
+		envfuncs.CreateCluster(kind.NewProvider(), kindClusterName),
 		envfuncs.CreateNamespace(namespace),
 		PatchCoreDNSConfigMap,
 		CreateDoltClusterCtlServiceAccount,

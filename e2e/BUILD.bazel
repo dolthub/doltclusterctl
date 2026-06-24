@@ -1,6 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 go_test(
     name = "e2e_test",
@@ -38,6 +39,7 @@ go_test(
         "@io_k8s_sigs_e2e_framework//pkg/envconf",
         "@io_k8s_sigs_e2e_framework//pkg/envfuncs",
         "@io_k8s_sigs_e2e_framework//pkg/features",
+        "@io_k8s_sigs_e2e_framework//support/kind",
     ],
 )
 
@@ -52,6 +54,7 @@ sh_test(
         ":toxiproxy.tar",
         "//:image.tar",
         "//e2e/incluster:incluster.tar",
+        "@bazel_tools//tools/bash/runfiles",
         "@io_k8s_sigs_kind//:kind",
     ],
     tags = ["manual"],
@@ -59,13 +62,16 @@ sh_test(
 
 pkg_tar(
     name = "dolt_layer",
-    srcs = ["@dolt_release_linux_amd64//:bin/dolt"],
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@dolt_release_linux_arm64//:bin/dolt"],
+        "//conditions:default": ["@dolt_release_linux_amd64//:bin/dolt"],
+    }),
     package_dir = "/usr/local/bin",
 )
 
 oci_image(
     name = "dolt",
-    base = "@ubuntu2004",
+    base = "@ubuntu2404",
     tars = [":dolt_layer"],
     visibility = ["//visibility:private"],
 )
@@ -73,7 +79,7 @@ oci_image(
 oci_load(
     name = "dolt_loaded",
     image = ":dolt",
-    repo_tags = ["dolthub/doltclusterctl_e2e_dolt"],
+    repo_tags = ["dolt:latest"],
     visibility = ["//visibility:private"],
 )
 
@@ -86,13 +92,16 @@ filegroup(
 
 pkg_tar(
     name = "dolt_1_5_0_layer",
-    srcs = ["@dolt_1_5_0_release_linux_amd64//:bin/dolt"],
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@dolt_1_5_0_release_linux_arm64//:bin/dolt"],
+        "//conditions:default": ["@dolt_1_5_0_release_linux_amd64//:bin/dolt"],
+    }),
     package_dir = "/usr/local/bin",
 )
 
 oci_image(
     name = "dolt_1_5_0",
-    base = "@ubuntu2004",
+    base = "@ubuntu2404",
     tars = [":dolt_1_5_0_layer"],
     visibility = ["//visibility:private"],
 )
@@ -100,7 +109,7 @@ oci_image(
 oci_load(
     name = "dolt_1_5_0_loaded",
     image = ":dolt_1_5_0",
-    repo_tags = ["dolthub/doltclusterctl_e2e_dolt_1_5_0"],
+    repo_tags = ["dolt:v1.5.0"],
     visibility = ["//visibility:private"],
 )
 
@@ -113,13 +122,16 @@ filegroup(
 
 pkg_tar(
     name = "toxiproxy_layer",
-    srcs = ["@toxiproxy_release_linux_amd64//:toxiproxy-server"],
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@toxiproxy_release_linux_arm64//:toxiproxy-server"],
+        "//conditions:default": ["@toxiproxy_release_linux_amd64//:toxiproxy-server"],
+    }),
     package_dir = "/usr/local/bin",
 )
 
 oci_image(
     name = "toxiproxy",
-    base = "@ubuntu2004",
+    base = "@ubuntu2404",
     tars = [":toxiproxy_layer"],
     visibility = ["//visibility:private"],
 )
