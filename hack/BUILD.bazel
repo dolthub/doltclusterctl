@@ -1,7 +1,14 @@
-sh_binary(
+load("gotool.bzl", "go_sdk_tool")
+
+go_sdk_tool(
     name = "gofmt",
+    goroot_relative_path = "bin/gofmt",
+)
+
+sh_binary(
+    name = "gofmt.run",
     srcs = ["gofmt.sh"],
     data = [
-        "@go_sdk//:bin/gofmt",
+        ":gofmt",
     ],
 )

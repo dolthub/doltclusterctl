@@ -1,5 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 
 go_test(
@@ -70,10 +70,17 @@ oci_image(
     visibility = ["//visibility:private"],
 )
 
-oci_tarball(
-    name = "dolt.tar",
+oci_load(
+    name = "dolt_loaded",
     image = ":dolt",
-    repo_tags = ["dolt:latest"],
+    repo_tags = ["dolthub/doltclusterctl_e2e_dolt"],
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "dolt.tar",
+    srcs = [":dolt_loaded"],
+    output_group = "tarball",
     visibility = ["//visibility:private"],
 )
 
@@ -90,10 +97,17 @@ oci_image(
     visibility = ["//visibility:private"],
 )
 
-oci_tarball(
-    name = "dolt-1.5.0.tar",
+oci_load(
+    name = "dolt_1_5_0_loaded",
     image = ":dolt_1_5_0",
-    repo_tags = ["dolt:v1.5.0"],
+    repo_tags = ["dolthub/doltclusterctl_e2e_dolt_1_5_0"],
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "dolt-1.5.0.tar",
+    srcs = [":dolt_1_5_0_loaded"],
+    output_group = "tarball",
     visibility = ["//visibility:private"],
 )
 
@@ -110,9 +124,16 @@ oci_image(
     visibility = ["//visibility:private"],
 )
 
-oci_tarball(
-    name = "toxiproxy.tar",
+oci_load(
+    name = "toxiproxy_loaded",
     image = ":toxiproxy",
     repo_tags = ["toxiproxy:latest"],
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "toxiproxy.tar",
+    srcs = [":toxiproxy_loaded"],
+    output_group = "tarball",
     visibility = ["//visibility:private"],
 )

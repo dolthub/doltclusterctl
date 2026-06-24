@@ -20,4 +20,4 @@ if ! cd "$BUILD_WORKSPACE_DIRECTORY"; then
   exit 1
 fi
 
-exec "${RUNFILES}"/go_sdk/bin/gofmt -w .
+exec "${RUNFILES}"/_main/hack/gofmt_launcher.sh -w .
