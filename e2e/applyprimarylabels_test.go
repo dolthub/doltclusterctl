@@ -47,7 +47,10 @@ func TestApplyPrimaryLabels(t *testing.T) {
 		Assess("Connect/dolt-ro", RunUnitTestInCluster(InClusterTest{TestName: "TestConnectToService", DBName: "dolt-ro"})).
 		Feature()
 	password := features.New("WithPassword").
-		WithSetup("create statefulset", CreateStatefulSet(WithCredentials(envconf.RandomName("user", 12), envconf.RandomName("pass", 12)))).
+		// Dolt 2.0 only supports a "root" superuser (configured via env vars on
+		// the dolt container); custom usernames are no longer settable through
+		// server config, so this exercises password auth as root.
+		WithSetup("create statefulset", CreateStatefulSet(WithCredentials("root", envconf.RandomName("pass", 12)))).
 		WithTeardown("delete statefulset", DeleteStatefulSet).
 		Assess("RunPrimaryLabels", RunDoltClusterCtlJob(WithArgs("applyprimarylabels", "dolt"))).
 		Assess("dolt-0/IsPrimary", AssertPodHasLabel("dolt-0", "dolthub.com/cluster_role", "primary")).

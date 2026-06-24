@@ -102,6 +102,11 @@ func NewDeployment(namespace string) *appsv1.Deployment {
 						Env: []v1.EnvVar{{
 							Name:  "DOLT_ROOT_PATH",
 							Value: "/var/doltdb",
+						}, {
+							// Dolt 2.0 only auto-creates root@localhost; make root
+							// reachable over the network for doltclusterctl.
+							Name:  "DOLT_ROOT_HOST",
+							Value: "%",
 						}},
 						VolumeMounts: []v1.VolumeMount{{
 							Name:      "dolt-storage",

@@ -182,6 +182,26 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 	if config.ImageTag != "" {
 		tag = config.ImageTag
 	}
+
+	// As of Dolt 2.0 the sql-server no longer reads users from the config file
+	// and only auto-creates a localhost-scoped root@localhost superuser. We use
+	// DOLT_ROOT_HOST to make root reachable over the network (which is how
+	// doltclusterctl connects) and DOLT_ROOT_PASSWORD to set its password when
+	// the test configures one.
+	doltEnv := []v1.EnvVar{{
+		Name:  "DOLT_ROOT_PATH",
+		Value: "/var/doltdb",
+	}, {
+		Name:  "DOLT_ROOT_HOST",
+		Value: "%",
+	}}
+	if config.Password != "" {
+		doltEnv = append(doltEnv, v1.EnvVar{
+			Name:  "DOLT_ROOT_PASSWORD",
+			Value: config.Password,
+		})
+	}
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: "dolt", Namespace: namespace},
 		Spec: appsv1.StatefulSetSpec{
@@ -204,10 +224,7 @@ func NewStatefulSet(namespace string, config StatefulSetConfig) (*appsv1.Statefu
 							ContainerPort: 3306,
 						}},
 						WorkingDir: "/var/doltdb",
-						Env: []v1.EnvVar{{
-							Name:  "DOLT_ROOT_PATH",
-							Value: "/var/doltdb",
-						}},
+						Env:        doltEnv,
 						VolumeMounts: []v1.VolumeMount{{
 							Name:      "dolt-storage",
 							MountPath: "/var/doltdb",
@@ -367,14 +384,10 @@ cluster:
     port: 50052
 %s
 `, role, ListenerStanza(config)))
-	if config.Username != "" {
-		parts = append(parts, fmt.Sprintf(`user:
-  name: %s
-`, config.Username))
-		if config.Password != "" {
-			parts = append(parts, fmt.Sprintf("  password: %s\n", config.Password))
-		}
-	}
+	// Note: Dolt 2.0 removed support for configuring users in config.yaml ("user
+	// and password are no longer supported in sql-server configuration files").
+	// The server's root user is instead configured via the DOLT_ROOT_HOST and
+	// DOLT_ROOT_PASSWORD environment variables set on the dolt container.
 	return strings.Join(parts, "")
 }
 

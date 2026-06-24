@@ -98,10 +98,10 @@ http_archive(
     build_file_content = """
 exports_files(["bin/dolt"])
 """,
-    sha256 = "4a9b15c5fe93a99a95905edb6beb61c691957c763f1fe47556e68edb43835507",
+    sha256 = "7a110a74597876f830afa756cee80d7bbe1402bf7237e6752e68de3415e8e4e8",
     strip_prefix = "dolt-linux-amd64",
     urls = [
-        "https://github.com/dolthub/dolt/releases/download/v1.43.13/dolt-linux-amd64.tar.gz",
+        "https://github.com/dolthub/dolt/releases/download/v2.1.9/dolt-linux-amd64.tar.gz",
     ],
 )
 
@@ -110,10 +110,10 @@ http_archive(
     build_file_content = """
 exports_files(["bin/dolt"])
 """,
-    sha256 = "3b6222733be6e8cd32337949b7cceb907a452622184a69fbf3efb9e4a77afb4a",
+    sha256 = "3f6cca60036a10e6d0b59dcdc9332b70405baa11fec7433761e24ef0e0cbbe85",
     strip_prefix = "dolt-linux-arm64",
     urls = [
-        "https://github.com/dolthub/dolt/releases/download/v1.43.13/dolt-linux-arm64.tar.gz",
+        "https://github.com/dolthub/dolt/releases/download/v2.1.9/dolt-linux-arm64.tar.gz",
     ],
 )
 
