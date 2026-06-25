@@ -32,10 +32,13 @@ platform_transition_filegroup(
         ":incluster_layer",
     ],
     # Keep the host CPU (see //:image_layer_transitioned) so the incluster test
-    # image runs natively in a host-arch kind node.
+    # image runs natively in a host-arch kind node. These platforms carry the
+    # //:incluster_test marker constraint so the incluster_test go_test resolves
+    # the any-platform test toolchain instead of bazel's strict default (the
+    # test is only shipped as a data payload, never executed by bazel).
     target_platform = select({
-        "@platforms//cpu:aarch64": "//:aarch64-linux",
-        "//conditions:default": "//:x86_64-linux",
+        "@platforms//cpu:aarch64": "//:aarch64-linux-incluster-test",
+        "//conditions:default": "//:x86_64-linux-incluster-test",
     }),
     visibility = ["//visibility:private"],
 )

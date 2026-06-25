@@ -4,6 +4,7 @@ load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("//:test_toolchain.bzl", "any_platform_test_toolchain")
 
 buildifier(
     name = "buildifier",
@@ -135,5 +136,46 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:aarch64",
     ],
+    visibility = ["//visibility:public"],
+)
+
+# Marker constraint identifying a platform whose test targets are built only to
+# be shipped as a data payload and run elsewhere (in a kind cluster), never
+# executed by bazel. The incluster go_test is transitioned to one of the
+# *-linux-incluster-test platforms below, which carry this constraint, and the
+# any_platform_test_toolchain is scoped to it. See test_toolchain.bzl.
+constraint_setting(name = "incluster_test_setting")
+
+constraint_value(
+    name = "incluster_test",
+    constraint_setting = ":incluster_test_setting",
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "x86_64-linux-incluster-test",
+    constraint_values = [":incluster_test"],
+    parents = [":x86_64-linux"],
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "aarch64-linux-incluster-test",
+    constraint_values = [":incluster_test"],
+    parents = [":aarch64-linux"],
+    visibility = ["//visibility:public"],
+)
+
+any_platform_test_toolchain(name = "incluster_test_toolchain_impl")
+
+# A test toolchain (no use_target_platform_constraints) scoped via
+# target_compatible_with to only the incluster-test marker platforms, so it
+# replaces the strict default test toolchain only for the cross-compiled,
+# data-only incluster test. Registered in MODULE.bazel.
+toolchain(
+    name = "incluster_test_toolchain",
+    target_compatible_with = [":incluster_test"],
+    toolchain = ":incluster_test_toolchain_impl",
+    toolchain_type = "@bazel_tools//tools/test:default_test_toolchain_type",
     visibility = ["//visibility:public"],
 )

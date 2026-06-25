@@ -2,6 +2,10 @@ module(
     name = "com_github_dolthub_doltclusterctl",
 )
 
+# Scoped test toolchain for the cross-compiled, data-only incluster go_test.
+# See //:test_toolchain.bzl and //:incluster_test_toolchain.
+register_toolchains("//:incluster_test_toolchain")
+
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_oci", version = "2.2.5")
